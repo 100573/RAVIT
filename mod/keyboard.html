@@ -1,0 +1,354 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <title>キーボード位置選択（画像オーバーレイ）</title>
+  <style>
+    * { box-sizing: border-box; }
+
+    body {
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Yu Gothic", sans-serif;
+      margin: 20px;
+    }
+
+    .kb-wrap {
+      position: relative;
+      width: 1000px;      /* 画像の表示サイズ。必要なら調整してOK */
+      max-width: 100%;
+      border: 1px solid #ccc;
+    }
+
+    .kb-image {
+      display: block;
+      width: 100%;
+      height: auto;
+    }
+
+    /* 画像の上に重ねる透明ボタン（キー全体を覆う） */
+    .key-btn {
+      position: absolute;
+      transform: translate(-50%, -50%); /* 中心を座標に合わせる */
+
+      border: none;
+      background: transparent;  /* 完全透明 */
+      color: transparent;       /* ラベルも非表示 */
+      cursor: pointer;
+    }
+
+    /* 選択中だけ枠線を出して見えるように（いらなければ消してOK） */
+    .key-btn.active {
+      outline: 2px solid #2b5bd8;
+      outline-offset: -2px;
+    }
+
+    .selected-info {
+      margin: 8px 0;
+      font-size: 13px;
+    }
+  </style>
+</head>
+<body>
+
+<h1>キーボード位置選択（6行）</h1>
+
+<!-- DB に保存する番号 -->
+<input type="hidden" id="position" name="position">
+<div class="selected-info">
+  選択中: <span id="positionLabel">なし</span>
+</div>
+
+<div class="kb-wrap" id="kbWrap">
+  <!-- 同じディレクトリに keyboard.png を置く -->
+  <img src="keyboardd.png" alt="keyboard" class="kb-image">
+</div>
+
+<script>
+  /*
+   * keyboardRows:
+   *  - rowY : 各行の縦位置（画像に対するパーセント、中心）
+   *  - rowH : 各行の高さ（％）→ ボタンの高さに使う
+   *  - keys : 左から右に並ぶキー。w は横幅の比率（大きいキーほど大きい数字）
+   *
+   * この情報から、
+   *   - 行全体が横 0%〜100% をきっちり埋める長方形
+   *   - 各キーのボタンがその上にかぶさる
+   * という形で配置する。
+   * 番号(No.)は左上から順に 1,2,3,...（F8 は No.9）
+   */
+    // ★ PgUp の配置（%）ここだけ触れば位置を微調整できる
+  const PGUP_LEFT   = 90; // 横位置（0〜100%）
+  const PGUP_TOP    = 76; // 縦位置（0〜100%）
+  const PGUP_WIDTH  = 6;  // 横幅（%）
+  const PGUP_HEIGHT = 7;  // 高さ（%）
+
+  const keyboardRows = [
+    // 1行目: Esc〜F12, PrtSc, Pause, Insert, Delete
+    {
+      rowY: 12,   // 行の縦位置（だいたい Fキー列の真ん中）
+      rowH: 9,   // 行の高さ（％）
+      keys: [
+        { label: "Esc",   w: 1.2 },
+        { label: "F1",    w: 1 },
+        { label: "F2",    w: 1 },
+        { label: "F3",    w: 1 },
+        { label: "F4",    w: 1 },
+        { label: "F5",    w: 1 },
+        { label: "F6",    w: 0.9 },
+        { label: "F7",    w: 1 },
+        { label: "F8",    w: 1 }, // ← No.9 になる
+        { label: "F9",    w: 1 },
+        { label: "F10",   w: 1 },
+        { label: "F11",   w: 1 },
+        { label: "F12",   w: 1 },
+        { label: "PrtSc", w: 1 },
+        { label: "Pause", w: 1 },
+        { label: "Insert",w: 1 },
+        { label: "Delete",w: 1.3 }
+      ]
+    },
+
+    // 2行目: 半角/全角〜Backspace
+    {
+      rowY: 24,
+      rowH: 12,
+      keys: [
+        { label: "半角/全角", w: 1.4 },
+        { label: "1",          w: 1.1 },
+        { label: "2",          w: 1.1 },
+        { label: "3",          w: 1.1 },
+        { label: "4",          w: 1.1 },
+        { label: "5",          w: 1.1 },
+        { label: "6",          w: 1.1 },
+        { label: "7",          w: 1.1 },
+        { label: "8",          w: 1.1 },
+        { label: "9",          w: 1.1 },
+        { label: "0",          w: 1.1 },
+      
+        { label: "=",          w: 1.1 },
+        { label: "~",          w: 1.1 },
+        { label: "¥",          w: 1.1 },
+        { label: "Backspace", w: 1.3 }
+      ]
+    },
+
+    // 3行目: Tab〜Enter
+    {
+      rowY: 38,
+      rowH: 11,
+      keys: [
+        { label: "Tab",   w: 1.8 },
+        { label: "Q",     w: 1 },
+        { label: "W",     w: 1 },
+        { label: "E",     w: 1 },
+        { label: "R",     w: 1 },
+        { label: "T",     w: 1 },
+        { label: "Y",     w: 1 },
+        { label: "U",     w: 1 },
+        { label: "I",     w: 1 },
+        { label: "O",     w: 1 },
+        { label: "P",     w: 1 },
+  
+        { label: "@",     w: 1 },
+        { label: "[",     w: 1 },
+        { label: "Enter", w: 1.8 }
+      ]
+    },
+
+    // 4行目: CapsLock〜}
+    {
+      rowY: 52,
+      rowH: 13,
+      keys: [
+        { label: "CapsLock", w: 1.9 },
+        { label: "A",        w: 1 },
+        { label: "S",        w: 1 },
+        { label: "D",        w: 1 },
+        { label: "F",        w: 1 },
+        { label: "G",        w: 1 },
+        { label: "H",        w: 1 },
+        { label: "J",        w: 1 },
+        { label: "K",        w: 1 },
+        { label: "L",        w: 1 },
+        { label: "+",        w: 1 },
+        { label: "*",        w: 1 },
+        { label: "}",        w: 1 },
+        { label: "Enter", w: 1.4 }
+      ]
+    },
+
+    // 5行目: Shift〜Shift
+    {
+      rowY: 65,
+      rowH: 12,
+      keys: [
+        { label: "Shift", w: 2.5 },
+        { label: "Z",     w: 1 },
+        { label: "X",     w: 1 },
+        { label: "C",     w: 1 },
+        { label: "V",     w: 1 },
+        { label: "B",     w: 1 },
+        { label: "N",     w: 1 },
+        { label: "M",     w: 1 },
+        { label: "<",     w: 1 },
+        { label: ">",     w: 1 },
+        { label: "?",     w: 1 },
+        { label: "_",     w: 1 },
+        { label: "Shift", w: 2 }
+      ]
+    },
+
+    // 6行目: Ctrl〜Ctrl + PgUp/Home/PgDn/End
+    {
+      rowY: 82,
+      rowH: 15,
+      keys: [
+        { label: "Ctrl",            w: 1.7},
+        { label: "Fn",              w: 1.1 },
+        { label: "Win",             w: 1.1 },
+        { label: "Alt",             w: 1.1 },
+        { label: "無変換",          w: 1.1 },
+        { label: "Space",           w: 3 },
+        { label: "変換",            w: 1 },
+        { label: "カタカナ/ひらがな", w: 1 },
+        { label: "Alt",             w: 1 },
+        { label: "Menu",            w: 0.9 },
+        { label: "Ctrl",            w: 1 },
+       { label: "PgUp",            w: 0.1,  independent: true },
+        { label: "Home",            w: 1,   h: 9 },
+        { label: "PgDn",            w: 1,   h: 7 },
+        { label: "End",             w: 1.3, h: 9 }
+      ]
+    }
+  ];
+
+  const kbWrap        = document.getElementById('kbWrap');
+  const positionInput = document.getElementById('position');
+  const positionLabel = document.getElementById('positionLabel');
+
+  let codeCounter = 1;          // No.1〜
+  const independentKeys = [];   // PgUp 用の一時退避
+  let firstEnterCode; // 最初に見つかった Enter の番号を共有する
+
+  // 共通のクリック処理
+  function attachClick(btn, code, label) {
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('.key-btn').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      // Enter が複数ある場合は、最初に割り当てられた番号を共通で使う
+      let useCode = code;
+      if (label === 'Enter') {
+        if (firstEnterCode === undefined) firstEnterCode = code;
+        useCode = firstEnterCode;
+      }
+      positionInput.value = useCode;
+      positionLabel.textContent = `${label} (No.${useCode})`;
+      
+      // 親ウィンドウに選択結果を送信
+      try {
+        if (window.opener && !window.opener.closed) {
+          window.opener.postMessage({ type: 'keyboard-selected', value: useCode }, '*');
+        }
+      } catch (e) {
+        console.warn('postMessage error', e);
+      }
+      
+      // 自動で自分を閉じる
+      setTimeout(() => {
+        window.close();
+      }, 100);
+    });
+  }
+
+  // 各行のボタン生成
+  keyboardRows.forEach(row => {
+    const totalWidth = row.keys.reduce((sum, key) => sum + (key.w || 1), 0);
+    let offset = 0;
+
+    row.keys.forEach(key => {
+      const w = key.w || 1;
+      const widthPercent  = (w / totalWidth) * 100;
+      const centerPercent = (offset + w / 2) / totalWidth * 100;
+      offset += w;
+
+      // ここで No. 採番
+      // Enter が2個あるため、最初の Enter にだけ新しい番号を割り当て
+      // 2つ目の Enter は同じ番号を使い、codeCounter は進めない
+      let code;
+      if (key.label === 'Enter') {
+        if (firstEnterCode === undefined) {
+          code = codeCounter++;
+          firstEnterCode = code;
+        } else {
+          code = firstEnterCode;
+        }
+      } else {
+        code = codeCounter++;
+      }
+
+      // ★ PgUp はここで位置情報だけ保存してスキップ
+      if (key.independent) {
+        independentKeys.push({
+          label: key.label,
+          code,
+          widthPercent,
+          centerPercent,
+          // 6行目より少し上に置きたいので 0.6 行ぶんだけ上へ
+          rowY: row.rowY - row.rowH * 0.6,
+          rowH: row.rowH
+        });
+        return;
+      }
+
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'key-btn';
+
+      btn.style.left   = centerPercent + '%';
+      btn.style.top    = row.rowY + '%';
+      btn.style.width  = widthPercent + '%';
+      // キー個別の高さ(h)があればそれを優先、なければ行の高さを使う
+      const heightPercent = (key.h !== undefined) ? key.h : row.rowH;
+      btn.style.height = heightPercent + '%';
+
+      btn.dataset.code  = code;
+      btn.dataset.label = key.label;
+
+      attachClick(btn, code, key.label);
+      kbWrap.appendChild(btn);
+    });
+  });
+
+  // ★ PgUp 独立ボタンを x,y 指定で追加
+  independentKeys.forEach(k => {
+    if (k.label !== "PgUp") return;  // 念のため
+
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'key-btn';
+
+    btn.style.left   = PGUP_LEFT   + '%';
+    btn.style.top    = PGUP_TOP    + '%';
+    btn.style.width  = PGUP_WIDTH  + '%';
+    btn.style.height = PGUP_HEIGHT + '%';
+
+    btn.dataset.code  = k.code;   // No.86 のまま
+    btn.dataset.label = k.label;
+
+    attachClick(btn, k.code, k.label);
+    kbWrap.appendChild(btn);
+  });
+
+  // 採番の順番は前と同じなので、
+  // F8 は No.9、Home/PgDn/End も前と同じ No. のまま。
+  // 採番ルール（コメント用）:
+  //  1行目 Esc〜Delete → 1〜17
+  //  2行目 半角/全角〜Backspace → 18〜33
+  //  3行目 Tab〜Enter → 34〜48
+  //  4行目 CapsLock〜} → 49〜61
+  //  5行目 Shift〜Shift → 62〜74
+  //  6行目 Ctrl〜End → 75〜89
+  // なので F8 は 1行目の9番目 → No.9。
+</script>
+
+</body>
+</html>

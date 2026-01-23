@@ -1,0 +1,574 @@
+<!doctype html>
+<html lang="ja">
+
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>在庫管理</title>
+  <style>
+    :root {
+      --bg: #f6f7fb;
+      --card: #ffffff;
+      --text: #1c1f24;
+      --muted: #5b6675;
+      --accent: #e15b32;
+      --border: #d7dde7;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--text);
+      font-family: "Yu Gothic", "Meiryo", sans-serif;
+    }
+
+    .page {
+      max-width: 1200px;
+      margin: 0 auto;
+      padding: 24px;
+    }
+
+    .header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      margin-bottom: 20px;
+    }
+
+    .header h1 {
+      margin: 0;
+      font-size: 24px;
+      letter-spacing: 0.02em;
+    }
+
+    .btn {
+      border: 1px solid var(--border);
+      background: var(--card);
+      color: var(--text);
+      padding: 8px 14px;
+      border-radius: 8px;
+      cursor: pointer;
+      font-size: 14px;
+    }
+
+    .btn.primary {
+      background: var(--accent);
+      color: #fff;
+      border-color: var(--accent);
+    }
+
+    .summary {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+      gap: 12px;
+      margin-bottom: 20px;
+    }
+
+    .card {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 14px;
+    }
+
+    .card .label {
+      font-size: 12px;
+      color: var(--muted);
+      margin-bottom: 6px;
+    }
+
+    .card .value {
+      font-size: 20px;
+      font-weight: 700;
+    }
+
+    .filters {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+      gap: 10px;
+      align-items: center;
+      margin-bottom: 12px;
+    }
+
+    .filters input,
+    .filters select {
+      width: 100%;
+      padding: 8px 10px;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      font-size: 14px;
+    }
+
+    .status {
+      margin: 8px 0 16px;
+      color: var(--muted);
+      font-size: 13px;
+    }
+
+    .serialLink {
+      color: #2563eb;
+      font-weight: 700;
+      text-decoration: none;
+    }
+
+    .serialLink:hover {
+      text-decoration: underline;
+    }
+
+    .sectionTitle {
+      margin: 24px 0 10px;
+      font-size: 18px;
+      font-weight: 700;
+    }
+
+    .listTables {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+      gap: 16px;
+    }
+
+    .listHeader {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 8px;
+      font-size: 13px;
+      color: var(--muted);
+    }
+
+    .listCount {
+      font-weight: 700;
+      color: var(--text);
+    }
+
+    .miniTable th,
+    .miniTable td {
+      font-size: 12px;
+      padding: 8px;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      overflow: hidden;
+    }
+
+    thead th {
+      background: #eef1f6;
+      text-align: left;
+      font-size: 12px;
+      padding: 10px;
+      border-bottom: 1px solid var(--border);
+    }
+
+    tbody td {
+      padding: 10px;
+      border-bottom: 1px solid var(--border);
+      font-size: 13px;
+    }
+
+    tbody tr:last-child td {
+      border-bottom: none;
+    }
+
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 2px 8px;
+      border-radius: 999px;
+      font-size: 12px;
+      border: 1px solid var(--border);
+      background: #fff;
+    }
+
+    .badge.ok {
+      border-color: #1f8f3b;
+      color: #1f8f3b;
+    }
+
+    .badge.ng {
+      border-color: #c9392b;
+      color: #c9392b;
+    }
+
+    .badge.other {
+      border-color: #667085;
+      color: #667085;
+    }
+
+    .badge.used {
+      border-color: #3a6ef0;
+      color: #3a6ef0;
+    }
+
+    .badge.stock {
+      border-color: #e15b32;
+      color: #e15b32;
+    }
+
+    .error {
+      color: #c9392b;
+      font-size: 13px;
+      margin-top: 8px;
+    }
+
+    @media (max-width: 800px) {
+      .filters {
+        grid-template-columns: 1fr;
+      }
+    }
+  </style>
+</head>
+
+<body>
+  <div class="page">
+    <div class="header">
+      <h1>製品在庫 管理</h1>
+      <button class="btn primary" id="refreshBtn">更新</button>
+    </div>
+
+    <section class="summary">
+      <div class="card">
+        <div class="label">受入総数</div>
+        <div class="value" id="sumTotal">-</div>
+      </div>
+      <div class="card">
+        <div class="label">OK</div>
+        <div class="value" id="sumOk">-</div>
+      </div>
+      <div class="card">
+        <div class="label">NG</div>
+        <div class="value" id="sumNg">-</div>
+      </div>
+      <div class="card">
+        <div class="label">その他</div>
+        <div class="value" id="sumOther">-</div>
+      </div>
+      <div class="card">
+        <div class="label">OK率</div>
+        <div class="value" id="sumOkRate">-</div>
+      </div>
+      <div class="card">
+        <div class="label">脱落率</div>
+        <div class="value" id="sumNgRate">-</div>
+      </div>
+      <div class="card">
+        <div class="label">使用済(Oracle)</div>
+        <div class="value" id="sumUsed">-</div>
+      </div>
+      <div class="card">
+        <div class="label">在庫数</div>
+        <div class="value" id="sumStock">-</div>
+      </div>
+    </section>
+
+    <section class="filters">
+      <input type="text" id="serialFilter" placeholder="serial で検索" />
+      <select id="resultFilter">
+        <option value="ALL">すべて</option>
+        <option value="OK">OK</option>
+        <option value="NG">NG</option>
+        <option value="OTHER">その他</option>
+      </select>
+      <select id="stockFilter">
+        <option value="ALL">在庫: 全部</option>
+        <option value="STOCK">在庫のみ</option>
+        <option value="USED">使用済みのみ</option>
+      </select>
+      <input type="date" id="dateFrom" aria-label="登録日(開始)" title="登録日(開始)" />
+      <input type="date" id="dateTo" aria-label="登録日(終了)" title="登録日(終了)" />
+      <input type="number" id="limitInput" min="1" max="5000" value="200" placeholder="表示件数" />
+      <button class="btn" id="applyBtn">適用</button>
+    </section>
+
+    <div class="status" id="oracleStatus">Oracle: -</div>
+    <div class="error" id="errorBox"></div>
+
+    <table>
+      <thead>
+        <tr>
+          <th>serial</th>
+          <th>result</th>
+          <th>box</th>
+          <th>regtime</th>
+          <th>在庫</th>
+        </tr>
+      </thead>
+      <tbody id="rows"></tbody>
+    </table>
+
+    <div class="sectionTitle">使用済み / 在庫 シリアル</div>
+    <div class="status" id="listStatus">-</div>
+    <section class="listTables">
+      <div class="card">
+        <div class="listHeader">
+          <span>使用済み</span>
+          <span class="listCount" id="usedCount">-</span>
+        </div>
+        <table class="miniTable">
+          <thead>
+            <tr>
+              <th>serial</th>
+              <th>box</th>
+              <th>regtime</th>
+            </tr>
+          </thead>
+          <tbody id="usedRows"></tbody>
+        </table>
+      </div>
+      <div class="card">
+        <div class="listHeader">
+          <span>在庫</span>
+          <span class="listCount" id="stockCount">-</span>
+        </div>
+        <table class="miniTable">
+          <thead>
+            <tr>
+              <th>serial</th>
+              <th>box</th>
+              <th>regtime</th>
+            </tr>
+          </thead>
+          <tbody id="stockRows"></tbody>
+        </table>
+      </div>
+    </section>
+  </div>
+
+  <script>
+    const els = {
+      total: document.getElementById('sumTotal'),
+      ok: document.getElementById('sumOk'),
+      ng: document.getElementById('sumNg'),
+      other: document.getElementById('sumOther'),
+      okRate: document.getElementById('sumOkRate'),
+      ngRate: document.getElementById('sumNgRate'),
+      used: document.getElementById('sumUsed'),
+      stock: document.getElementById('sumStock'),
+      status: document.getElementById('oracleStatus'),
+      error: document.getElementById('errorBox'),
+      rows: document.getElementById('rows'),
+      usedRows: document.getElementById('usedRows'),
+      stockRows: document.getElementById('stockRows'),
+      serialFilter: document.getElementById('serialFilter'),
+      resultFilter: document.getElementById('resultFilter'),
+      stockFilter: document.getElementById('stockFilter'),
+      dateFrom: document.getElementById('dateFrom'),
+      dateTo: document.getElementById('dateTo'),
+      limitInput: document.getElementById('limitInput'),
+      refreshBtn: document.getElementById('refreshBtn'),
+      applyBtn: document.getElementById('applyBtn'),
+      listStatus: document.getElementById('listStatus'),
+      usedCount: document.getElementById('usedCount'),
+      stockCount: document.getElementById('stockCount')
+    };
+    let oracleAvailable = false;
+
+    function fmtNum(value) {
+      if (value === null || value === undefined) return '-';
+      return Number(value).toLocaleString();
+    }
+
+    function fmtRate(value) {
+      if (value === null || value === undefined) return '-';
+      return `${Number(value).toFixed(1)}%`;
+    }
+
+    function renderSummary(summary, oracle) {
+      oracleAvailable = !!oracle.available;
+      els.total.textContent = fmtNum(summary.total);
+      els.ok.textContent = fmtNum(summary.ok);
+      els.ng.textContent = fmtNum(summary.ng);
+      els.other.textContent = fmtNum(summary.other);
+      els.okRate.textContent = fmtRate(summary.ok_rate);
+      els.ngRate.textContent = fmtRate(summary.ng_rate);
+      els.used.textContent = oracle.available ? fmtNum(oracle.used_count) : '-';
+      els.stock.textContent = summary.inventory === null ? '-' : fmtNum(summary.inventory);
+
+      if (!oracle.available) {
+        els.status.textContent = `Oracle: 未接続 (${oracle.message || '設定なし'})`;
+      } else {
+        els.status.textContent = 'Oracle: 接続OK';
+      }
+    }
+
+    function badge(text, type) {
+      const span = document.createElement('span');
+      span.className = `badge ${type}`.trim();
+      span.textContent = text;
+      return span;
+    }
+
+    function renderRows(rows) {
+      els.rows.textContent = '';
+      if (!rows || rows.length === 0) {
+        const tr = document.createElement('tr');
+        const td = document.createElement('td');
+        td.colSpan = 5;
+        td.textContent = 'データがありません';
+        tr.appendChild(td);
+        els.rows.appendChild(tr);
+        return;
+      }
+
+      rows.forEach(row => {
+        const tr = document.createElement('tr');
+
+        const tdSerial = document.createElement('td');
+        const serial = row.serial || '';
+        if (serial) {
+          const link = document.createElement('a');
+          link.href = `edit.php?serial_scan=${encodeURIComponent(serial)}&limit=all`;
+          link.textContent = serial;
+          link.className = 'serialLink';
+          link.target = '_blank';
+          link.rel = 'noopener';
+          tdSerial.appendChild(link);
+        } else {
+          tdSerial.textContent = '';
+        }
+
+        const tdResult = document.createElement('td');
+        const result = (row.result || '').toUpperCase();
+        if (result === 'OK') {
+          tdResult.appendChild(badge('OK', 'ok'));
+        } else if (result === 'NG') {
+          tdResult.appendChild(badge('NG', 'ng'));
+        } else {
+          tdResult.appendChild(badge(result || '-', 'other'));
+        }
+
+        const tdBox = document.createElement('td');
+        tdBox.textContent = row.box || '';
+
+        const tdTime = document.createElement('td');
+        tdTime.textContent = row.regtime || '';
+
+        const tdStock = document.createElement('td');
+        if (result === 'OK') {
+          if (!oracleAvailable || row.used === null) {
+            tdStock.textContent = '-';
+          } else {
+            tdStock.appendChild(row.used ? badge('使用済', 'used') : badge('在庫', 'stock'));
+          }
+        } else {
+          tdStock.textContent = '-';
+        }
+
+        tr.appendChild(tdSerial);
+        tr.appendChild(tdResult);
+        tr.appendChild(tdBox);
+        tr.appendChild(tdTime);
+        tr.appendChild(tdStock);
+        els.rows.appendChild(tr);
+      });
+    }
+
+    function renderListRows(target, rows) {
+      target.textContent = '';
+      if (!rows || rows.length === 0) {
+        const tr = document.createElement('tr');
+        const td = document.createElement('td');
+        td.colSpan = 3;
+        td.textContent = 'データがありません';
+        tr.appendChild(td);
+        target.appendChild(tr);
+        return;
+      }
+      rows.forEach(row => {
+        const tr = document.createElement('tr');
+        const tdSerial = document.createElement('td');
+        const serial = row.serial || '';
+        if (serial) {
+          const link = document.createElement('a');
+          link.href = `edit.php?serial_scan=${encodeURIComponent(serial)}&limit=all`;
+          link.textContent = serial;
+          link.className = 'serialLink';
+          link.target = '_blank';
+          link.rel = 'noopener';
+          tdSerial.appendChild(link);
+        } else {
+          tdSerial.textContent = '';
+        }
+        const tdBox = document.createElement('td');
+        tdBox.textContent = row.box || '';
+        const tdTime = document.createElement('td');
+        tdTime.textContent = row.regtime || '';
+        tr.appendChild(tdSerial);
+        tr.appendChild(tdBox);
+        tr.appendChild(tdTime);
+        target.appendChild(tr);
+      });
+    }
+
+    function renderLists(lists, filters) {
+      const used = lists?.used || { total: 0, displayed: 0, rows: [] };
+      const stock = lists?.stock || { total: 0, displayed: 0, rows: [] };
+      const message = lists?.message || '';
+      if (!oracleAvailable) {
+        els.listStatus.textContent = `Oracle未接続のため一覧は表示できません (${message || '設定なし'})`;
+      } else if (message) {
+        els.listStatus.textContent = `一覧取得失敗: ${message}`;
+      } else {
+        const from = filters?.date_from || '指定なし';
+        const to = filters?.date_to || '指定なし';
+        const limit = filters?.list_limit === null ? '全件' : fmtNum(filters?.list_limit || 0);
+        els.listStatus.textContent = `登録日: ${from} 〜 ${to} / 表示件数: ${limit}`;
+      }
+      els.usedCount.textContent = `${fmtNum(used.displayed)} / ${fmtNum(used.total)}`;
+      els.stockCount.textContent = `${fmtNum(stock.displayed)} / ${fmtNum(stock.total)}`;
+      renderListRows(els.usedRows, used.rows);
+      renderListRows(els.stockRows, stock.rows);
+    }
+
+    async function loadData() {
+      els.error.textContent = '';
+      const params = new URLSearchParams();
+      const serial = els.serialFilter.value.trim();
+      const result = els.resultFilter.value;
+      const stock = els.stockFilter.value;
+      const limit = els.limitInput.value.trim();
+      const dateFrom = els.dateFrom.value;
+      const dateTo = els.dateTo.value;
+
+      if (serial) params.set('serial', serial);
+      if (result) params.set('result', result);
+      if (stock && stock !== 'ALL') params.set('stock', stock);
+      if (limit) {
+        params.set('limit', limit);
+        params.set('list_limit', limit);
+      }
+      if (dateFrom) params.set('date_from', dateFrom);
+      if (dateTo) params.set('date_to', dateTo);
+
+      try {
+        const res = await fetch(`kanri.php?${params.toString()}`, { cache: 'no-store' });
+        const data = await res.json();
+        if (!data.ok) {
+          throw new Error(data.error || '取得に失敗しました');
+        }
+        renderSummary(data.summary, data.oracle);
+        renderRows(data.rows);
+        renderLists(data.lists, data.filters);
+      } catch (err) {
+        els.error.textContent = `取得失敗: ${err.message}`;
+      }
+    }
+
+    els.refreshBtn.addEventListener('click', loadData);
+    els.applyBtn.addEventListener('click', loadData);
+
+    loadData();
+  </script>
+</body>
+
+</html>

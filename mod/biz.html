@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <title>位置選択パネル</title>
+
+  <style>
+    * { box-sizing: border-box; }
+
+    body {
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Yu Gothic", sans-serif;
+      margin: 20px;
+    }
+
+    .panel-wrap {
+      position: relative;
+      width: 600px;     /* 画像の表示サイズ（好みで調整） */
+      max-width: 100%;
+      border: 1px solid #ccc;
+    }
+
+    .panel-image {
+      display: block;
+      width: 100%;
+      height: auto;
+    }
+
+    /* 画像の上に重ねる番号ボタン */
+    .pos-btn {
+      position: absolute;
+      transform: translate(-50%, -50%); /* 中心合わせ */
+
+      min-width: 45px;
+      height: 35px;
+      padding: 1px 2px;
+      border-radius: 0px;
+      border: 3px solid #000000;
+      background: rgb(255, 255, 255);
+      font-size: 20px;
+      text-align: center;
+      cursor: pointer;
+
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      white-space: nowrap;
+    }
+
+    .pos-btn:hover {
+      background: #ffd;
+      border-color: #f80;
+    }
+
+    .pos-btn.active {
+      background: #ef5b5b;
+      border-color: #ac0000;
+      color: #fff;
+    }
+  </style>
+</head>
+<body>
+
+<h1>位置選択パネル（1〜17）</h1>
+
+<!-- DBに保存する番号を入れる hidden -->
+<input type="hidden" id="position" name="position">
+選択中: <span id="positionLabel">なし</span>
+
+<div class="panel-wrap" id="panelWrap">
+  <!-- ここに自分の画像ファイル名を指定 -->
+  <img src="panel.png" alt="panel" class="panel-image">
+</div>
+
+<script>
+  // ==== ボタンの定義 ====
+  // x,y は 0〜100 のパーセント（画像に対する位置）
+  // label: ボタンに表示する数字
+  // code : DBに保存したい番号（labelと同じでもいいし変えてもOK）
+  const positions = [
+    { label: "1", code: 1, x:  8, y:  4 },
+    { label: "2", code: 2, x: 21, y:  4 },
+    { label: "3", code: 3, x: 28, y:  4 },
+    { label: "4", code: 4, x: 46, y:  8 },
+    { label: "5", code: 5, x: 63, y:  4 },
+    { label: "6", code: 6, x: 78, y:  4 },
+    { label: "7", code: 7, x: 92, y:  4 },
+
+    { label: "8", code: 8, x:  9, y: 43 },
+    { label: "9",  code:  9, x: 40, y: 50 },
+    { label: "10",  code:  10, x: 62, y: 50 },
+    { label: "11",  code:  11, x: 90, y: 44 },
+
+    { label: "12",  code:  12, x:  5, y: 82 },
+    { label: "13",  code:  13, x: 12, y: 82 },
+    { label: "14",  code:  14, x: 35, y: 84 },
+    { label: "15",  code:  15, x: 70, y: 84 },
+    { label: "16",  code:  16, x: 87, y: 82 },
+    { label: "17",  code:  17, x: 92, y: 74 }
+  ];
+  // ↑ x,y はざっくり置いてあるだけなので、
+  // 実際の画像を見ながら数値を微調整してね（%なので動かしやすい）
+
+  const panelWrap = document.getElementById('panelWrap');
+  const positionInput = document.getElementById('position');
+  const positionLabel = document.getElementById('positionLabel');
+
+  // ==== ボタンを動的に配置 ====
+  positions.forEach(p => {
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'pos-btn';
+    btn.textContent = p.label;
+
+    // 画像に対する相対位置（%）
+    btn.style.left = p.x + '%';
+    btn.style.top  = p.y + '%';
+
+    btn.dataset.code  = p.code;
+    btn.dataset.label = p.label;
+
+    btn.addEventListener('click', () => {
+      // DBに保存したい番号だけ hidden に入れる
+      positionInput.value = p.code;
+      positionLabel.textContent = p.label;
+
+      // 親ウィンドウに選択結果を送信
+      try {
+        if (window.opener && !window.opener.closed) {
+          window.opener.postMessage({ type: 'biz-selected', value: p.code }, '*');
+        }
+      } catch (e) {
+        console.warn('postMessage error', e);
+      }
+
+      // 自動で自分を閉じる
+      setTimeout(() => {
+        window.close();
+      }, 100);
+    });
+
+    panelWrap.appendChild(btn);
+  });
+</script>
+
+</body>
+</html>

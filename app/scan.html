@@ -1,0 +1,358 @@
+<!doctype html>
+<html lang="ja">
+
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Scan & Print</title>
+
+  <style>
+    :root {
+      /* ===== ここだけ触れば調整できる ===== */
+      --paper-width: 80mm;      /* ロール幅 */
+      --side-padding: 4mm;      /* 左右余白 */
+      --top-padding: 4mm;       /* 上余白 */
+      --bottom-padding: 4mm;    /* 下余白 */
+
+      --serial-font: 26px;      /* Serialの文字 */
+      --date-font: 18px;        /* 日時 */
+      --label-font: 18px;       /* 「部品/位置/症状」 */
+      --value-font: 20px;       /* 値 */
+
+      --qr-size: 24mm;          /* QRのサイズ */
+      --gap-1: 3mm;             /* ブロック間の隙間 */
+      --gap-2: 2mm;             /* 行間の隙間 */
+    }
+
+    body {
+      font-family: "Yu Gothic UI", "Meiryo", Consolas, monospace;
+      margin: 12px;
+      color: #000;
+    }
+
+    #serialInput {
+      font-size: 22px;
+      width: 100%;
+      padding: 8px;
+    }
+
+    #msg {
+      margin-top: 8px;
+      color: #333;
+    }
+
+    /* 印刷用領域 */
+    #paper {
+      width: var(--paper-width);
+      margin: 0 auto;
+      box-sizing: border-box;
+      padding: var(--top-padding) var(--side-padding) var(--bottom-padding);
+    }
+
+    /* ヘッダ：左 Serial/日時、右 QR */
+    .headerPanel {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: var(--gap-1);
+      margin-bottom: var(--gap-1);
+    }
+
+    .headLeft {
+      flex: 1;
+      min-width: 0;
+    }
+
+    #serialHead {
+      font-size: var(--serial-font);
+      font-weight: 800;
+      line-height: 1.05;
+      margin: 0;
+      word-break: break-all;
+    }
+
+    #dateHead {
+      font-size: var(--date-font);
+      font-weight: 600;
+      margin: 2mm 0 0;
+      line-height: 1.1;
+      white-space: nowrap;
+    }
+
+    #qr {
+      width: var(--qr-size);
+      height: var(--qr-size);
+      flex: 0 0 var(--qr-size);
+      display: grid;
+      place-items: start end;
+    }
+
+    #qr img,
+    #qr canvas {
+      width: 100%;
+      height: 100%;
+      display: block;
+    }
+
+    /* 3列ヘッダ + 明細 */
+    .gridHeader {
+      display: grid;
+      grid-template-columns: 1fr 1fr 1fr;
+      column-gap: 2mm;
+      margin-top: 2mm;
+      margin-bottom: 1mm;
+      font-size: var(--label-font);
+      font-weight: 500;
+    }
+
+    .gridHeader > div:nth-child(1) { text-align: left; }
+    .gridHeader > div:nth-child(2) { text-align: center; }
+    .gridHeader > div:nth-child(3) { text-align: right; }
+
+    #rows {
+      display: grid;
+      row-gap: var(--gap-2);
+    }
+
+    .row {
+      display: grid;
+      grid-template-columns: 1fr 1fr 1fr;
+      column-gap: 2mm;
+      font-size: var(--value-font);
+      line-height: 1.25;
+    }
+
+    .cell.parts   { text-align: left; }
+    .cell.pos     { text-align: center; }
+    .cell.symptom { text-align: right; }
+
+    .cell {
+      word-break: break-word;
+      overflow-wrap: anywhere;
+      white-space: pre-wrap;
+      min-width: 0;
+    }
+
+    .footerText {
+      margin-top: 6mm;
+      text-align: right;
+      font-size: 14px;
+      color: #000;
+    }
+
+    /* 印刷時：UIは消して紙面だけ */
+    @media print {
+      #ui { display: none; }
+      body { margin: 0; }
+      #paper { margin: 0; }
+    }
+
+    /* 余白（環境で効いたり効かなかったり） */
+    @page {
+      margin: 0;
+      /* size: 80mm auto; */
+    }
+  </style>
+</head>
+
+<body>
+  <div id="ui">
+    <div>serialQR を読んで Enter</div>
+    <input id="serialInput" autocomplete="off" autofocus />
+    <div id="msg"></div>
+  </div>
+
+  <div id="paper">
+    <div class="headerPanel">
+      <div class="headLeft">
+        <div id="serialHead"></div>
+        <div id="dateHead"></div>
+      </div>
+      <div id="qr"></div>
+    </div>
+
+    <div class="gridHeader">
+      <div>部品</div>
+      <div>位置</div>
+      <div>症状</div>
+    </div>
+
+    <div id="rows"></div>
+
+    <div class="footerText">@ravit</div>
+  </div>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+  <script>
+    const inputEl = document.getElementById("serialInput");
+    const msgEl = document.getElementById("msg");
+    const serialEl = document.getElementById("serialHead");
+    const dateEl = document.getElementById("dateHead");
+    const qrEl = document.getElementById("qr");
+    const rowsEl = document.getElementById("rows");
+
+    // フォーカス維持（スキャナ運用で重要）
+    setInterval(() => inputEl.focus(), 500);
+
+    function normalizeSerial(raw) {
+      let s = (raw ?? "").trim();
+      s = s.replace(/\r?\n/g, "");
+      s = s.replace(/^SERIAL=|^SN:|^SER:/i, "");
+      return s.trim();
+    }
+
+    const API_URL = "print.php";
+    const RETURN_URL = "judge.php";
+    let lastPrintedSerial = "";
+    let redirectTimer = null;
+
+    async function fetchPrintData(serial) {
+      const url = `${API_URL}?serial=${encodeURIComponent(serial)}`;
+      const res = await fetch(url, { cache: "no-store" });
+      const json = await res.json().catch(() => null);
+      if (!res.ok || !json) {
+        const detail = json?.error ?? `HTTP ${res.status}`;
+        throw new Error(detail);
+      }
+      return json;
+    }
+
+    async function doPrint(serial) {
+      msgEl.textContent = "検索中…";
+      serialEl.textContent = "";
+      dateEl.textContent = "";
+      rowsEl.innerHTML = "";
+      lastPrintedSerial = serial;
+
+      const data = await fetchPrintData(serial);
+
+      // 画像どおり：左に Serial と 日付時刻、右に QR
+      serialEl.textContent = `Serial ${data.serial ?? serial}`;
+      dateEl.textContent = formatPrintTime(new Date());
+      renderQR(data.serial ?? serial);
+
+      // 3列（部品/位置/症状）
+      renderRows(data);
+
+      msgEl.textContent = "";
+      window.print();
+      scheduleReturn();
+    }
+    function renderRows(data) {
+  const rows = Array.isArray(data?.rows) ? data.rows : [];
+  rowsEl.innerHTML = "";
+
+  rows.forEach(r => {
+    const parts = (r.parts ?? "").toString();
+    const position = (r.position ?? "").toString();
+    const symptom = (r.symptom ?? "").toString();
+
+    // 1) 部品行（左列だけ埋める）
+    rowsEl.appendChild(makeRow(parts, "", ""));
+    // 2) 位置行（中央列だけ埋める）
+    rowsEl.appendChild(makeRow("", position, ""));
+    // 3) 症状行（右列だけ埋める）
+    rowsEl.appendChild(makeRow("", "", symptom));
+
+    // 行の区切りに少し空きを入れたいなら（任意）
+    // rowsEl.appendChild(makeSpacer());
+  });
+}
+function makeSpacer() {
+  const sp = document.createElement("div");
+  sp.style.height = "1mm";  // ←ここ
+  return sp;
+}
+
+function makeRow(parts, pos, symptom) {
+  const row = document.createElement("div");
+  row.className = "row";
+
+  const c1 = document.createElement("div");
+  c1.className = "cell parts";
+  c1.textContent = parts;
+
+  const c2 = document.createElement("div");
+  c2.className = "cell pos";
+  c2.textContent = pos;
+
+  const c3 = document.createElement("div");
+  c3.className = "cell symptom";
+  c3.textContent = symptom;
+
+  row.appendChild(c1);
+  row.appendChild(c2);
+  row.appendChild(c3);
+  return row;
+}
+
+    function returnToJudge() {
+      const backUrl = lastPrintedSerial
+        ? `${RETURN_URL}?serial=${encodeURIComponent(lastPrintedSerial)}`
+        : RETURN_URL;
+
+      if (window.opener && !window.opener.closed) {
+        try {
+          window.opener.location.href = backUrl;
+          window.opener.focus?.();
+          window.close();
+          return;
+        } catch (err) { /* ignore */ }
+      }
+      window.location.replace(backUrl);
+    }
+
+    function scheduleReturn() {
+      if (redirectTimer) clearTimeout(redirectTimer);
+      redirectTimer = setTimeout(returnToJudge, 500);
+    }
+
+    window.addEventListener("afterprint", scheduleReturn);
+
+    inputEl.addEventListener("keydown", (e) => {
+      if (e.key !== "Enter") return;
+      e.preventDefault();
+
+      const serial = normalizeSerial(inputEl.value);
+      inputEl.value = "";
+      if (!serial) return;
+
+      doPrint(serial).catch(err => {
+        msgEl.textContent = "失敗: " + err.message;
+      });
+    });
+
+    // URLパラメータ serial があれば自動印刷
+    const params = new URLSearchParams(window.location.search);
+    const initialSerial = normalizeSerial(params.get("serial"));
+    if (initialSerial) {
+      inputEl.value = initialSerial;
+      doPrint(initialSerial).catch(err => {
+        msgEl.textContent = "失敗: " + err.message;
+      });
+    }
+
+    function renderQR(text) {
+      if (!qrEl) return;
+      qrEl.innerHTML = "";
+      if (!text || typeof QRCode === "undefined") return;
+
+      // CSSでサイズ固定してるので width/height は同値でOK
+      const size = Math.max(80, Math.floor(qrEl.getBoundingClientRect().width || 120));
+      new QRCode(qrEl, { text, width: size, height: size });
+    }
+
+    function formatPrintTime(date) {
+      const pad = (v) => String(v).padStart(2, "0");
+      const y = date.getFullYear();
+      const m = pad(date.getMonth() + 1);
+      const d = pad(date.getDate());
+      const hh = pad(date.getHours());
+      const mm = pad(date.getMinutes());
+      const ss = pad(date.getSeconds());
+      return `${y}-${m}-${d} ${hh}:${mm}:${ss}`;
+    }
+  </script>
+</body>
+
+</html>
