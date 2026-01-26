@@ -9,19 +9,30 @@
   <style>
     :root {
       /* ===== ここだけ触れば調整できる ===== */
-      --paper-width: 80mm;      /* ロール幅 */
-      --side-padding: 4mm;      /* 左右余白 */
-      --top-padding: 4mm;       /* 上余白 */
-      --bottom-padding: 4mm;    /* 下余白 */
+      --paper-width: 80mm;
+      /* ロール幅 */
+      --side-padding: 4mm;
+      /* 左右余白 */
+      --top-padding: 2mm;
+      /* 上余白 */
+      --bottom-padding: 4mm;
+      /* 下余白 */
 
-      --serial-font: 26px;      /* Serialの文字 */
-      --date-font: 18px;        /* 日時 */
-      --label-font: 18px;       /* 「部品/位置/症状」 */
-      --value-font: 20px;       /* 値 */
+      --serial-font: 20px;
+      /* Serialの文字 */
+      --date-font: 18px;
+      /* 日時 */
+      --label-font: 18px;
+      /* 「部品/位置/症状」 */
+      --value-font: 18px;
+      /* 値 */
 
-      --qr-size: 24mm;          /* QRのサイズ */
-      --gap-1: 3mm;             /* ブロック間の隙間 */
-      --gap-2: 2mm;             /* 行間の隙間 */
+      --qr-size: 18mm;
+      /* QRのサイズ */
+      --gap-1: 3mm;
+      /* ブロック間の隙間 */
+      --gap-2: 2mm;
+      /* 行間の隙間 */
     }
 
     body {
@@ -31,7 +42,7 @@
     }
 
     #serialInput {
-      font-size: 22px;
+      font-size: 24px;
       width: 100%;
       padding: 8px;
     }
@@ -105,9 +116,17 @@
       font-weight: 500;
     }
 
-    .gridHeader > div:nth-child(1) { text-align: left; }
-    .gridHeader > div:nth-child(2) { text-align: center; }
-    .gridHeader > div:nth-child(3) { text-align: right; }
+    .gridHeader>div:nth-child(1) {
+      text-align: left;
+    }
+
+    .gridHeader>div:nth-child(2) {
+      text-align: center;
+    }
+
+    .gridHeader>div:nth-child(3) {
+      text-align: right;
+    }
 
     #rows {
       display: grid;
@@ -117,14 +136,22 @@
     .row {
       display: grid;
       grid-template-columns: 1fr 1fr 1fr;
-      column-gap: 2mm;
+      column-gap: 1mm;
       font-size: var(--value-font);
-      line-height: 1.25;
+      line-height: 0.55;
     }
 
-    .cell.parts   { text-align: left; }
-    .cell.pos     { text-align: center; }
-    .cell.symptom { text-align: right; }
+    .cell.parts {
+      text-align: left;
+    }
+
+    .cell.pos {
+      text-align: center;
+    }
+
+    .cell.symptom {
+      text-align: right;
+    }
 
     .cell {
       word-break: break-word;
@@ -142,9 +169,17 @@
 
     /* 印刷時：UIは消して紙面だけ */
     @media print {
-      #ui { display: none; }
-      body { margin: 0; }
-      #paper { margin: 0; }
+      #ui {
+        display: none;
+      }
+
+      body {
+        margin: 0;
+      }
+
+      #paper {
+        margin: 0;
+      }
     }
 
     /* 余白（環境で効いたり効かなかったり） */
@@ -227,7 +262,7 @@
       const data = await fetchPrintData(serial);
 
       // 画像どおり：左に Serial と 日付時刻、右に QR
-      serialEl.textContent = `Serial ${data.serial ?? serial}`;
+      serialEl.textContent = data.serial ?? serial;
       dateEl.textContent = formatPrintTime(new Date());
       renderQR(data.serial ?? serial);
 
@@ -239,52 +274,52 @@
       scheduleReturn();
     }
     function renderRows(data) {
-  const rows = Array.isArray(data?.rows) ? data.rows : [];
-  rowsEl.innerHTML = "";
+      const rows = Array.isArray(data?.rows) ? data.rows : [];
+      rowsEl.innerHTML = "";
 
-  rows.forEach(r => {
-    const parts = (r.parts ?? "").toString();
-    const position = (r.position ?? "").toString();
-    const symptom = (r.symptom ?? "").toString();
+      rows.forEach(r => {
+        const parts = (r.parts ?? "").toString();
+        const position = (r.position ?? "").toString();
+        const symptom = (r.symptom ?? "").toString();
 
-    // 1) 部品行（左列だけ埋める）
-    rowsEl.appendChild(makeRow(parts, "", ""));
-    // 2) 位置行（中央列だけ埋める）
-    rowsEl.appendChild(makeRow("", position, ""));
-    // 3) 症状行（右列だけ埋める）
-    rowsEl.appendChild(makeRow("", "", symptom));
+        // 1) 部品行（左列だけ埋める）
+        rowsEl.appendChild(makeRow(parts, "", ""));
+        // 2) 位置行（中央列だけ埋める）
+        rowsEl.appendChild(makeRow("", position, ""));
+        // 3) 症状行（右列だけ埋める）
+        rowsEl.appendChild(makeRow("", "", symptom));
 
-    // 行の区切りに少し空きを入れたいなら（任意）
-    // rowsEl.appendChild(makeSpacer());
-  });
-}
-function makeSpacer() {
-  const sp = document.createElement("div");
-  sp.style.height = "1mm";  // ←ここ
-  return sp;
-}
+        // 行の区切りに少し空きを入れたいなら（任意）
+        // rowsEl.appendChild(makeSpacer());
+      });
+    }
+    function makeSpacer() {
+      const sp = document.createElement("div");
+      sp.style.height = "1mm";  // ←ここ
+      return sp;
+    }
 
-function makeRow(parts, pos, symptom) {
-  const row = document.createElement("div");
-  row.className = "row";
+    function makeRow(parts, pos, symptom) {
+      const row = document.createElement("div");
+      row.className = "row";
 
-  const c1 = document.createElement("div");
-  c1.className = "cell parts";
-  c1.textContent = parts;
+      const c1 = document.createElement("div");
+      c1.className = "cell parts";
+      c1.textContent = parts;
 
-  const c2 = document.createElement("div");
-  c2.className = "cell pos";
-  c2.textContent = pos;
+      const c2 = document.createElement("div");
+      c2.className = "cell pos";
+      c2.textContent = pos;
 
-  const c3 = document.createElement("div");
-  c3.className = "cell symptom";
-  c3.textContent = symptom;
+      const c3 = document.createElement("div");
+      c3.className = "cell symptom";
+      c3.textContent = symptom;
 
-  row.appendChild(c1);
-  row.appendChild(c2);
-  row.appendChild(c3);
-  return row;
-}
+      row.appendChild(c1);
+      row.appendChild(c2);
+      row.appendChild(c3);
+      return row;
+    }
 
     function returnToJudge() {
       const backUrl = lastPrintedSerial

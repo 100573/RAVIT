@@ -1004,6 +1004,12 @@ $judgeRequiredCategories = judge_required_categories_from_config();
             });
             renderJudge(hasNg ? 'NG' : 'OK');
 
+            // NGの場合は自動で印刷ページを開く
+            if (hasNg) {
+                openPrintPage();
+                return;
+            }
+
             setBoxInputEnabled(true);
             if (!rows.length && !hasNg) {
                 setErr('OK');
