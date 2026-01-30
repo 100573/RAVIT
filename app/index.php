@@ -515,16 +515,22 @@ $qrDelimiter = defined('QR_DELIM') ? constant('QR_DELIM') : '_';
 
         .logText {
             flex: 1 1 auto;
+            min-width: 0;
         }
 
         .logDeleteBtn {
             border: 1px solid #dc2626;
             background: #ef4444;
             color: #fff;
-            padding: 6px 10px;
+            padding: 4px 8px;
             border-radius: 6px;
             cursor: pointer;
             font-weight: 700;
+            font-size: 0.75em;
+            white-space: nowrap;
+            flex-shrink: 0;
+            min-width: 40px;
+            text-align: center;
         }
 
         @media (max-width: 1024px) {

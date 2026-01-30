@@ -103,12 +103,14 @@ $waitingSearch = false;
 $exportType    = (string)($_GET['export'] ?? '');
 $exportCsv     = ($exportType === 'csv');
 $exportTotal   = ($exportType === 'total');
+$exportAllSerial = ($exportType === 'all_serial');
 $dateFrom      = trim((string)($_GET['date_from'] ?? ''));
 $dateTo        = trim((string)($_GET['date_to'] ?? ''));
 
 // --- まず GET パラメータから検索条件を初期化 ---------------------------------
 $searchSerial = trim((string)($_GET['serial_scan'] ?? ''));
 $searchBox    = trim((string)($_GET['box_scan'] ?? ''));
+$boxOnlyMode  = isset($_GET['box_only']) && $_GET['box_only'] === '1';
 $limitStr     = trim((string)($_GET['limit'] ?? 'all'));
 $limit        = null;
 if ($limitStr !== '' && strtolower($limitStr) !== 'all') {
@@ -136,6 +138,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $postDateTo = trim((string)($_POST['date_to'] ?? ''));
     if ($postDateFrom !== '') $dateFrom = $postDateFrom;
     if ($postDateTo !== '') $dateTo = $postDateTo;
+    $boxOnlyMode = isset($_POST['box_only']) && $_POST['box_only'] === '1';
 
     // 削除アクション処理
     $action = $_POST['action'] ?? '';
@@ -330,8 +333,161 @@ if ($exportTotal) {
     outputCsv($columns, $totalRows, $filename);
 }
 
-if (empty($filters)) {
-    // まだシリアル/BOXIDが入力されていない状態
+// --- 全シリアル CSV 出力（cate_end からシリアル取得 + fail_log を横並び） ---------------------------
+if ($exportAllSerial) {
+    $cateEndTable = quoteIdentifier('cate_end');
+    $failLogTable = quoteIdentifier('fail_log');
+
+    // cate_end からシリアルを重複なしで取得（日付フィルターあれば適用）
+    $serialFilters = [];
+    $serialParams = [];
+    if ($dateFrom !== '') {
+        $serialFilters[] = 'regtime >= :date_from';
+        $serialParams[':date_from'] = $dateFrom . ' 00:00:00';
+    }
+    if ($dateTo !== '') {
+        $serialFilters[] = 'regtime <= :date_to';
+        $serialParams[':date_to'] = $dateTo . ' 23:59:59';
+    }
+
+    $serialSql = "SELECT DISTINCT serial FROM {$cateEndTable}";
+    if (!empty($serialFilters)) {
+        $serialSql .= ' WHERE ' . implode(' AND ', $serialFilters);
+    }
+    $serialSql .= ' ORDER BY serial';
+
+    $serialStmt = $pdo->prepare($serialSql);
+    foreach ($serialParams as $key => $value) {
+        $serialStmt->bindValue($key, $value, PDO::PARAM_STR);
+    }
+    $serialStmt->execute();
+    $allSerials = $serialStmt->fetchAll(PDO::FETCH_COLUMN) ?: [];
+
+    // カテゴリの優先順序を定義（機能検査 > A面 > B面 > C面 > D面）
+    $categoryPriority = ['機能検査' => 1, 'A面' => 2, 'B面' => 3, 'C面' => 4, 'D面' => 5];
+
+    // fail_log から各シリアルの不良データを取得
+    $failDataBySerial = [];
+    $maxDefectsPerSerial = 0;
+
+    if (!empty($allSerials)) {
+        foreach (array_chunk($allSerials, 900) as $chunk) {
+            $placeholders = [];
+            $binds = [];
+            foreach ($chunk as $i => $serial) {
+                $ph = ':s' . $i;
+                $placeholders[] = $ph;
+                $binds[$ph] = $serial;
+            }
+            $failSql = "SELECT `serial`, `cate`, `parts`, `symptom`, `position`
+                        FROM {$failLogTable}
+                        WHERE `serial` IN (" . implode(',', $placeholders) . ")
+                        ORDER BY `serial`, `id`";
+            $failStmt = $pdo->prepare($failSql);
+            foreach ($binds as $key => $value) {
+                $failStmt->bindValue($key, $value, PDO::PARAM_STR);
+            }
+            $failStmt->execute();
+            while ($row = $failStmt->fetch(PDO::FETCH_ASSOC)) {
+                $s = trim((string)($row['serial'] ?? ''));
+                if ($s === '') continue;
+                $failDataBySerial[$s][] = [
+                    'cate' => $row['cate'] ?? '',
+                    'parts' => $row['parts'] ?? '',
+                    'symptom' => $row['symptom'] ?? '',
+                    'position' => $row['position'] ?? '',
+                ];
+            }
+        }
+    }
+
+    // 各シリアルの不良データをカテゴリ優先順でソート
+    foreach ($failDataBySerial as $serial => &$defects) {
+        usort($defects, function($a, $b) use ($categoryPriority) {
+            $prioA = $categoryPriority[$a['cate']] ?? 99;
+            $prioB = $categoryPriority[$b['cate']] ?? 99;
+            return $prioA - $prioB;
+        });
+        $maxDefectsPerSerial = max($maxDefectsPerSerial, count($defects));
+    }
+    unset($defects);
+
+    // boxid テーブルから判定とBOXID情報を取得
+    $boxidTable = quoteIdentifier('boxid');
+    $boxDataBySerial = [];
+    if (!empty($allSerials)) {
+        foreach (array_chunk($allSerials, 900) as $chunk) {
+            $placeholders = [];
+            $binds = [];
+            foreach ($chunk as $i => $serial) {
+                $ph = ':bs' . $i;
+                $placeholders[] = $ph;
+                $binds[$ph] = $serial;
+            }
+            $boxSql = "SELECT `serial`, `result`, `box`, `regtime`
+                       FROM {$boxidTable}
+                       WHERE `serial` IN (" . implode(',', $placeholders) . ")";
+            $boxStmt = $pdo->prepare($boxSql);
+            foreach ($binds as $key => $value) {
+                $boxStmt->bindValue($key, $value, PDO::PARAM_STR);
+            }
+            $boxStmt->execute();
+            while ($row = $boxStmt->fetch(PDO::FETCH_ASSOC)) {
+                $s = trim((string)($row['serial'] ?? ''));
+                if ($s === '') continue;
+                $boxDataBySerial[$s] = [
+                    'result' => $row['result'] ?? '',
+                    'box' => $row['box'] ?? '',
+                    'regtime' => $row['regtime'] ?? '',
+                ];
+            }
+        }
+    }
+
+    // カラムヘッダーの作成
+    $allSerialColumns = ['シリアル', '判定', 'BOXID'];
+    for ($i = 1; $i <= $maxDefectsPerSerial; $i++) {
+        $allSerialColumns[] = "不良{$i}_カテゴリ";
+        $allSerialColumns[] = "不良{$i}_部品";
+        $allSerialColumns[] = "不良{$i}_症状";
+        $allSerialColumns[] = "不良{$i}_位置";
+    }
+
+    // 各シリアルのデータ行を作成
+    $allSerialRows = [];
+    foreach ($allSerials as $serial) {
+        $serial = trim((string)$serial);
+        if ($serial === '') continue;
+
+        $boxInfo = $boxDataBySerial[$serial] ?? [];
+        $defects = $failDataBySerial[$serial] ?? [];
+
+        $line = [
+            'シリアル' => $serial,
+            '判定' => $boxInfo['result'] ?? '',
+            'BOXID' => $boxInfo['box'] ?? '',
+        ];
+
+        for ($i = 0; $i < $maxDefectsPerSerial; $i++) {
+            $def = $defects[$i] ?? null;
+            $idx = $i + 1;
+            $line["不良{$idx}_カテゴリ"] = $def['cate'] ?? '';
+            $line["不良{$idx}_部品"] = $def['parts'] ?? '';
+            $line["不良{$idx}_症状"] = $def['symptom'] ?? '';
+            $line["不良{$idx}_位置"] = $def['position'] ?? '';
+        }
+        $allSerialRows[] = $line;
+    }
+
+    $filename = 'all_serial_' . date('Ymd_His') . '.csv';
+    outputCsv($allSerialColumns, $allSerialRows, $filename);
+}
+
+// 検索が実行されたかどうか（GET/POSTがあれば実行）
+$isSearchExecuted = ($_SERVER['REQUEST_METHOD'] === 'POST') || isset($_GET['limit']) || isset($_GET['serial_scan']) || isset($_GET['box_scan']) || isset($_GET['date_from']) || isset($_GET['date_to']) || isset($_GET['box_only']);
+
+if (!$isSearchExecuted) {
+    // まだ検索が実行されていない状態
     $waitingSearch = true;
 } else {
     try {
@@ -340,22 +496,39 @@ if (empty($filters)) {
             $limit = max(1, min($limit, 1000));
         }
 
-        // LIMIT だけは数値を直接埋め込み（キャスト済みなので安全）
-        $sql = "SELECT * FROM {$quotedTable}";
-        if ($filters) {
-            $sql .= ' WHERE ' . implode(' AND ', $filters);
+        if ($boxOnlyMode) {
+            // BOXIDのみ表示モード（ユニークなBOXIDと件数）
+            $sql = "SELECT `box`, COUNT(*) as cnt, MAX(`regtime`) as last_regtime FROM {$quotedTable}";
+            if (!empty($filters)) {
+                $sql .= ' WHERE ' . implode(' AND ', $filters);
+            }
+            $sql .= " GROUP BY `box` ORDER BY last_regtime DESC";
+            if ($limit !== null) {
+                $sql .= " LIMIT {$limit}";
+            }
+            $stmt = $pdo->prepare($sql);
+            foreach ($params as $key => $value) {
+                $stmt->bindValue($key, $value, PDO::PARAM_STR);
+            }
+            $stmt->execute();
+            $logs = $stmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
+        } else {
+            // 通常モード
+            $sql = "SELECT * FROM {$quotedTable}";
+            if (!empty($filters)) {
+                $sql .= ' WHERE ' . implode(' AND ', $filters);
+            }
+            $sql .= " ORDER BY regtime DESC";
+            if ($limit !== null) {
+                $sql .= " LIMIT {$limit}";
+            }
+            $stmt = $pdo->prepare($sql);
+            foreach ($params as $key => $value) {
+                $stmt->bindValue($key, $value, PDO::PARAM_STR);
+            }
+            $stmt->execute();
+            $logs = $stmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
         }
-        $sql .= " ORDER BY regtime DESC";
-        if ($limit !== null) {
-            $sql .= " LIMIT {$limit}";
-        }
-        $stmt = $pdo->prepare($sql);
-        foreach ($params as $key => $value) {
-            $stmt->bindValue($key, $value, PDO::PARAM_STR);
-        }
-        $stmt->execute();
-
-        $logs = $stmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
 
         if (empty($logs)) {
             if ($searchSerial !== '') {
@@ -482,6 +655,20 @@ if ($exportCsv) {
             font-size: 1em;
         }
 
+        .filterForm .checkboxLabel {
+            flex-direction: row;
+            align-items: center;
+            gap: 6px;
+            font-weight: 600;
+            cursor: pointer;
+        }
+        .filterForm .checkboxLabel input[type="checkbox"] {
+            min-width: auto;
+            width: 18px;
+            height: 18px;
+            cursor: pointer;
+        }
+
         .filterForm button {
             padding: 10px 16px;
             border-radius: 8px;
@@ -491,64 +678,60 @@ if ($exportCsv) {
             font-weight: 700;
             cursor: pointer;
         }
+        .dateFilterSection {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            align-items: center;
+            padding: 12px;
+            background: #f1f5f9;
+            border-radius: 8px;
+            width: 100%;
+            margin-top: 8px;
+        }
+        .dateFilterSection label {
+            display: flex;
+            flex-direction: column;
+            font-size: 0.85em;
+            color: #475569;
+        }
+        .dateFilterSection input[type="date"] {
+            padding: 6px 8px;
+            border: 1px solid #cbd5e1;
+            border-radius: 6px;
+            font-size: 0.95em;
+            min-width: 140px;
+        }
+        .quickDateBtns {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 4px;
+            margin-left: 8px;
+        }
+        .quickDateBtn {
+            padding: 3px 8px;
+            border-radius: 4px;
+            border: 1px solid #cbd5e1;
+            background: #fff;
+            color: #334155;
+            font-size: 0.75em;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.15s;
+        }
+        .quickDateBtn:hover {
+            background: #e2e8f0;
+            border-color: #94a3b8;
+        }
+        .quickDateBtn.active {
+            background: #2563eb;
+            color: #fff;
+            border-color: #2563eb;
+        }
         .dateSummary {
             font-size: 0.9em;
             color: #475569;
-        }
-        .modalOverlay {
-            position: fixed;
-            inset: 0;
-            background: rgba(15, 23, 42, 0.35);
-            display: none;
-            align-items: center;
-            justify-content: center;
-            z-index: 50;
-        }
-        .modalOverlay.show {
-            display: flex;
-        }
-        .modal {
-            background: #fff;
-            padding: 20px;
-            border-radius: 12px;
-            min-width: 320px;
-            box-shadow: 0 12px 36px rgba(0, 0, 0, 0.2);
-        }
-        .modal h2 {
-            margin: 0 0 12px;
-            font-size: 20px;
-        }
-        .modal form {
-            display: flex;
-            flex-direction: column;
-            gap: 12px;
-        }
-        .modal .actions {
-            display: flex;
-            gap: 8px;
-            justify-content: flex-end;
-            margin-top: 8px;
-        }
-        .modal input[type="date"] {
-            padding: 8px 10px;
-            border: 1px solid #cbd5f5;
-            border-radius: 8px;
-            font-size: 1em;
-        }
-        .modal button {
-            padding: 8px 14px;
-            border-radius: 8px;
-            border: none;
-            font-weight: 700;
-            cursor: pointer;
-        }
-        .modal .primary {
-            background: #2563eb;
-            color: #fff;
-        }
-        .modal .ghost {
-            background: #e2e8f0;
-            color: #1e293b;
+            margin-left: auto;
         }
 
         .logTableWrap {
@@ -613,6 +796,13 @@ if ($exportCsv) {
             font-weight: 700;
         }
         .serialLink:hover {
+            text-decoration: underline;
+        }
+        .boxLink {
+            color: #059669;
+            font-weight: 700;
+        }
+        .boxLink:hover {
             text-decoration: underline;
         }
 
@@ -681,27 +871,82 @@ if ($exportCsv) {
                 <?php endforeach; ?>
             </select>
         </label>
-        <input type="hidden" name="date_from" id="fieldDateFrom" value="<?= escapeHtml($dateFrom) ?>" />
-        <input type="hidden" name="date_to" id="fieldDateTo" value="<?= escapeHtml($dateTo) ?>" />
-        <span class="dateSummary" id="dateSummary">
-            <?= ($dateFrom || $dateTo) ? ('期間: ' . escapeHtml($dateFrom ?: '指定なし') . ' 〜 ' . escapeHtml($dateTo ?: '指定なし')) : '期間: 指定なし' ?>
-        </span>
-        <button type="button" id="btnDateFilter">日付選択</button>
+        <label class="checkboxLabel">
+            <input type="checkbox" name="box_only" value="1" <?= $boxOnlyMode ? 'checked' : '' ?> />
+            BOXIDのみ表示
+        </label>
         <button type="submit">検索</button>
+        <div class="dateFilterSection">
+            <label>
+                開始日
+                <input type="date" name="date_from" id="fieldDateFrom" value="<?= escapeHtml($dateFrom) ?>" />
+            </label>
+            <label>
+                終了日
+                <input type="date" name="date_to" id="fieldDateTo" value="<?= escapeHtml($dateTo) ?>" />
+            </label>
+            <div class="quickDateBtns">
+                <button type="button" class="quickDateBtn" data-range="today">今日</button>
+                <button type="button" class="quickDateBtn" data-range="week">今週</button>
+                <button type="button" class="quickDateBtn" data-range="all">全期間</button>
+            </div>
+            <span class="dateSummary" id="dateSummary">
+                <?= ($dateFrom || $dateTo) ? ('期間: ' . escapeHtml($dateFrom ?: '指定なし') . ' 〜 ' . escapeHtml($dateTo ?: '指定なし')) : '期間: 指定なし' ?>
+            </span>
+        </div>
         <button type="submit" name="export" value="csv">CSV出力</button>
         <button type="submit" name="export" value="total">TOTAL出力</button>
+        <button type="submit" name="export" value="all_serial">全シリアル</button>
         <button type="button" id="btnClearFilters">クリア</button>
     </form>
 
     <?php if ($waitingSearch): ?>
-        <div class="noRows">シリアルまたはBOXIDを入力してください。</div>
+        <div class="noRows">検索ボタンを押すと全件表示されます。シリアルやBOXIDで絞り込むこともできます。</div>
     <?php elseif (empty($logs)): ?>
         <div class="noRows">レコードが見つかりません。</div>
+    <?php elseif ($boxOnlyMode): ?>
+        <p class="hint">BOXIDをクリックすると、そのBOXIDに登録されたシリアル一覧が表示されます。</p>
+        <div class="logTableWrap">
+            <div class="bulkActions">
+                <span class="recordCount">
+                    BOXID数: <?= count($logs) ?> 件
+                </span>
+            </div>
+            <table class="logTable">
+                <thead>
+                    <tr>
+                        <th>BOXID</th>
+                        <th>シリアル数</th>
+                        <th>最終登録日時</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <?php foreach ($logs as $row): ?>
+                        <?php $boxValue = $row['box'] ?? ''; ?>
+                        <tr>
+                            <td>
+                                <?php if ($boxValue !== ''): ?>
+                                    <?php $boxDetailLink = 'box.php?box_scan=' . rawurlencode((string)$boxValue) . '&limit=' . urlencode($limit === null ? 'all' : (string)$limit); ?>
+                                    <a class="cellText boxLink" href="<?= escapeHtml($boxDetailLink) ?>">
+                                        <?= escapeHtml($boxValue) ?>
+                                    </a>
+                                <?php else: ?>
+                                    <span class="cellText"><?= escapeHtml($boxValue) ?></span>
+                                <?php endif; ?>
+                            </td>
+                            <td><span class="cellText"><?= escapeHtml($row['cnt'] ?? '') ?></span></td>
+                            <td><span class="cellText"><?= escapeHtml($row['last_regtime'] ?? '') ?></span></td>
+                        </tr>
+                    <?php endforeach; ?>
+                </tbody>
+            </table>
+        </div>
     <?php else: ?>
         <p class="hint">チェックした行をまとめて削除できます。個別削除ボタンも利用可能です。</p>
         <form method="post">
             <input type="hidden" name="serial_scan" value="<?= escapeHtml($searchSerial) ?>" />
             <input type="hidden" name="box_scan" value="<?= escapeHtml($searchBox) ?>" />
+            <input type="hidden" name="box_only" value="<?= $boxOnlyMode ? '1' : '0' ?>" />
             <input type="hidden" name="limit" value="<?= escapeHtml($limit === null ? 'all' : (string)$limit) ?>" />
             <input type="hidden" name="date_from" value="<?= escapeHtml($dateFrom) ?>" />
             <input type="hidden" name="date_to" value="<?= escapeHtml($dateTo) ?>" />
@@ -741,6 +986,11 @@ if ($exportCsv) {
                                             <a class="cellText serialLink" href="<?= escapeHtml($serialLink) ?>" target="_blank" rel="noopener">
                                                 <?= escapeHtml($value) ?>
                                             </a>
+                                        <?php elseif ($boxColumn !== null && strcasecmp($col, $boxColumn) === 0 && $value !== ''): ?>
+                                            <?php $boxDetailLink = 'box.php?box_scan=' . rawurlencode((string)$value) . '&limit=' . urlencode($limit === null ? 'all' : (string)$limit); ?>
+                                            <a class="cellText boxLink" href="<?= escapeHtml($boxDetailLink) ?>">
+                                                <?= escapeHtml($value) ?>
+                                            </a>
                                         <?php else: ?>
                                             <span class="cellText"><?= escapeHtml($value) ?></span>
                                         <?php endif; ?>
@@ -763,25 +1013,6 @@ if ($exportCsv) {
             
         </form>
     <?php endif; ?>
-    <div class="modalOverlay" id="dateModal">
-        <div class="modal" role="dialog" aria-modal="true" aria-labelledby="dateModalTitle">
-            <h2 id="dateModalTitle">日付で絞り込む</h2>
-            <form id="dateForm">
-                <label>
-                    開始日
-                    <input type="date" id="inputDateFrom" value="<?= escapeHtml($dateFrom) ?>">
-                </label>
-                <label>
-                    終了日
-                    <input type="date" id="inputDateTo" value="<?= escapeHtml($dateTo) ?>">
-                </label>
-                <div class="actions">
-                    <button type="button" class="ghost" id="dateCancel">キャンセル</button>
-                    <button type="submit" class="primary">適用</button>
-                </div>
-            </form>
-        </div>
-    </div>
     <script>
         function toggleAll(master) {
             const checked = master.checked;
@@ -846,18 +1077,18 @@ if ($exportCsv) {
                 });
             }
 
-            const dateModal = document.getElementById('dateModal');
-            const dateForm = document.getElementById('dateForm');
-            const btnDateFilter = document.getElementById('btnDateFilter');
-            const btnCancel = document.getElementById('dateCancel');
-            const inputDateFrom = document.getElementById('inputDateFrom');
-            const inputDateTo = document.getElementById('inputDateTo');
+            // 日付クイックボタン
             const fieldDateFrom = document.getElementById('fieldDateFrom');
             const fieldDateTo = document.getElementById('fieldDateTo');
             const dateSummary = document.getElementById('dateSummary');
+            const quickDateBtns = document.querySelectorAll('.quickDateBtn');
 
-            const closeModal = () => dateModal?.classList.remove('show');
-            const openModal = () => dateModal?.classList.add('show');
+            const formatDate = (date) => {
+                const y = date.getFullYear();
+                const m = String(date.getMonth() + 1).padStart(2, '0');
+                const d = String(date.getDate()).padStart(2, '0');
+                return `${y}-${m}-${d}`;
+            };
 
             const updateSummary = () => {
                 if (!dateSummary || !fieldDateFrom || !fieldDateTo) return;
@@ -866,23 +1097,52 @@ if ($exportCsv) {
                 dateSummary.textContent = `期間: ${from} 〜 ${to}`;
             };
 
-            btnDateFilter?.addEventListener('click', () => {
-                if (inputDateFrom && fieldDateFrom) inputDateFrom.value = fieldDateFrom.value;
-                if (inputDateTo && fieldDateTo) inputDateTo.value = fieldDateTo.value;
-                openModal();
-            });
-
-            btnCancel?.addEventListener('click', () => {
-                closeModal();
-            });
-
-            dateForm?.addEventListener('submit', (e) => {
-                e.preventDefault();
-                if (fieldDateFrom && inputDateFrom) fieldDateFrom.value = inputDateFrom.value;
-                if (fieldDateTo && inputDateTo) fieldDateTo.value = inputDateTo.value;
+            const setDateRange = (from, to) => {
+                if (fieldDateFrom) fieldDateFrom.value = from;
+                if (fieldDateTo) fieldDateTo.value = to;
                 updateSummary();
-                filterForm?.submit();
+            };
+
+            quickDateBtns.forEach(btn => {
+                btn.addEventListener('click', () => {
+                    const range = btn.dataset.range;
+                    const today = new Date();
+                    let from = '', to = '';
+
+                    switch (range) {
+                        case 'today':
+                            from = to = formatDate(today);
+                            break;
+                        case 'week':
+                            const weekStart = new Date(today);
+                            const dayOfWeek = weekStart.getDay();
+                            const diff = dayOfWeek === 0 ? 6 : dayOfWeek - 1; // 月曜始まり
+                            weekStart.setDate(weekStart.getDate() - diff);
+                            from = formatDate(weekStart);
+                            to = formatDate(today);
+                            break;
+                        case 'all':
+                            from = '';
+                            to = '';
+                            break;
+                    }
+
+                    setDateRange(from, to);
+
+                    // アクティブ状態の更新
+                    quickDateBtns.forEach(b => b.classList.remove('active'));
+                    if (range !== 'all' || (from === '' && to === '')) {
+                        btn.classList.add('active');
+                    }
+
+                    // 自動でフォーム送信
+                    filterForm?.submit();
+                });
             });
+
+            // 日付入力変更時にサマリー更新
+            fieldDateFrom?.addEventListener('change', updateSummary);
+            fieldDateTo?.addEventListener('change', updateSummary);
 
             updateSummary();
         })();
