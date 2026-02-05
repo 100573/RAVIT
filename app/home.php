@@ -55,7 +55,7 @@ $baseHref = ($scriptDir === '/' ? '/' : $scriptDir . '/');
         body {
             margin: 0;
             font: 15px/1.2 system-ui, -apple-system, "Segoe UI", sans-serif;
-            background: #f4f4f8;
+            background: linear-gradient(135deg, #f0f4f8 0%, #e2e8f0 100%);
             color: #1f2933;
             height: 100vh;
             display: flex;
@@ -63,13 +63,14 @@ $baseHref = ($scriptDir === '/' ? '/' : $scriptDir . '/');
         }
 
         .controlBar {
-            padding: 12px 16px;
-            background: #fff;
-            border-bottom: 1px solid #e5e7eb;
+            padding: 14px 18px;
+            background: rgba(255, 255, 255, 0.95);
+            border-bottom: 1px solid #e2e8f0;
             display: flex;
             flex-direction: column;
             gap: 12px;
             position: relative;
+            backdrop-filter: blur(10px);
         }
 
         .statsRow {
@@ -81,11 +82,11 @@ $baseHref = ($scriptDir === '/' ? '/' : $scriptDir . '/');
             gap: 10px;
             font-weight: 700;
             color: #0f172a;
-            background: rgba(255, 255, 255, 0.96);
-            padding: 6px 10px;
-            border-radius: 8px;
-            border: 1px solid #e5e7eb;
-            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+            background: rgba(255, 255, 255, 0.98);
+            padding: 8px 14px;
+            border-radius: 12px;
+            border: 1px solid #e2e8f0;
+            box-shadow: 0 4px 16px rgba(0, 0, 0, 0.08);
             z-index: 15;
         }
 
@@ -100,10 +101,15 @@ $baseHref = ($scriptDir === '/' ? '/' : $scriptDir . '/');
             right: 10px;
             width: 48px;
             height: 48px;
-            border-radius: 8px;
+            border-radius: 12px;
             overflow: hidden;
-            box-shadow: 0 8px 20px rgba(0, 0, 0, 0.12);
+            box-shadow: 0 8px 20px rgba(0, 0, 0, 0.15);
             background: #e5e7eb;
+            transition: transform 0.2s ease;
+        }
+
+        .cornerThumb:hover {
+            transform: scale(1.05);
         }
 
         .cornerThumb img {
@@ -150,26 +156,37 @@ $baseHref = ($scriptDir === '/' ? '/' : $scriptDir . '/');
             display: inline-flex;
             align-items: center;
             gap: 6px;
-            padding: 8px 16px;
-            border-radius: 0;
-            border: 2px solid #95979bff;
-            background: #f3f4f6;
+            padding: 10px 18px;
+            border-radius: 10px;
+            border: none;
+            background: linear-gradient(135deg, #f1f5f9 0%, #e2e8f0 100%);
             color: #1f2933;
             font-weight: 700;
             text-decoration: none;
+            box-shadow: 0 2px 6px rgba(0, 0, 0, 0.06);
+            transition: all 0.2s ease;
         }
 
         .ctrlLink:hover {
-            background: #e5e7eb;
+            background: linear-gradient(135deg, #e2e8f0 0%, #cbd5e1 100%);
+            transform: translateY(-1px);
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
         }
 
         button.ctrl {
-            padding: 8px 14px;
-            border-radius: 0;
-            border: 2px solid #000000ff;
+            padding: 10px 16px;
+            border-radius: 10px;
+            border: 2px solid #e2e8f0;
             background: #fff;
             cursor: pointer;
             font-weight: 600;
+            transition: all 0.2s ease;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.04);
+        }
+
+        button.ctrl:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.08);
         }
         .adminLinks {
             margin-left: auto;
@@ -180,36 +197,34 @@ $baseHref = ($scriptDir === '/' ? '/' : $scriptDir . '/');
         }
 
         #modelBtns .ctrl {
-            padding: 10px 16px;
+            padding: 12px 18px;
             font-size: 20px;
-            border-radius: 0;
+            border-radius: 10px;
             min-width: 100px;
-
         }
 
         #catBtns .ctrl {
-            padding: 10px 16px;
+            padding: 12px 18px;
             min-width: 110px;
-            border-radius: 0;
+            border-radius: 10px;
             font-size: 24px;
         }
 
         button.ctrl.active {
-            background: #d8f5ffff;
-            border: 5px solid #111827;
-            box-shadow: 0 0 0 2px #11182766;
-            color: #000000ff;
+            background: linear-gradient(135deg, #dbeafe 0%, #bfdbfe 100%);
+            border: 3px solid #3b82f6;
+            box-shadow: 0 4px 12px rgba(59, 130, 246, 0.25);
+            color: #1e40af;
         }
         button.ctrl.completed {
-            background: #616165ff;
-            border-color: #000000ff;
-            color: #000000ff;
+            background: linear-gradient(135deg, #81868e 0%, #6b7280 100%);
+            border-color: #4b5563;
+            color: #fff;
         }
         button.ctrl.completed.active {
-            background: #8a9dbcff;
-           
-            border: 4px solid #000000ff;
-            color: #000000ff;
+            background: linear-gradient(135deg, #768fad 0%, #7492b7 100%);
+            border: 3px solid #2563eb;
+            color: #000000;
         }
 
         iframe {
@@ -222,7 +237,7 @@ $baseHref = ($scriptDir === '/' ? '/' : $scriptDir . '/');
             flex: 1 1 auto;
             position: relative;
             overflow: hidden;
-            background: #f8fafc;
+            background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%);
             display: flex;
         }
 
@@ -232,12 +247,12 @@ $baseHref = ($scriptDir === '/' ? '/' : $scriptDir . '/');
             width: 100%;
             height: 100%;
             object-fit: contain;
-            background: #f8fafc;
+            background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%);
             pointer-events: none;
         }
 
         .error {
-            color: #b91c1c;
+            color: #dc2626;
             font-weight: 600;
         }
 
@@ -245,9 +260,18 @@ $baseHref = ($scriptDir === '/' ? '/' : $scriptDir . '/');
             position: fixed;
             bottom: 100px;
             right: 280px;
-            padding: 14px 16px;
-            background: #10b981;
+            padding: 14px 18px;
+            background: linear-gradient(135deg, #10b981 0%, #059669 100%);
             color: #fff;
+            font-weight: 800;
+            border: none;
+            border-radius: 12px;
+            text-decoration: none;
+            opacity: 0.08;
+            transition: all 0.3s ease;
+            z-index: 20;
+            box-shadow: 0 4px 12px rgba(16, 185, 129, 0.3);
+        }
             font-weight: 800;
             border: 2px solid #0f5132;
             border-radius: 10px;
@@ -266,14 +290,15 @@ $baseHref = ($scriptDir === '/' ? '/' : $scriptDir . '/');
             top: 8px;
             left: 58%;
             transform: translateX(-50%);
-            background: rgba(255, 255, 255, 0.94);
-            padding: 10px 14px;
-            border-radius: 10px;
+            background: rgba(255, 255, 255, 0.98);
+            padding: 12px 16px;
+            border-radius: 16px;
             display: flex;
             align-items: center;
             gap: 12px;
             z-index: 15;
-            box-shadow: 0 6px 18px rgba(0, 0, 0, 0.08);
+            box-shadow: 0 8px 24px rgba(0, 0, 0, 0.1);
+            backdrop-filter: blur(10px);
         }
 
         .dragonIcon {
@@ -287,6 +312,7 @@ $baseHref = ($scriptDir === '/' ? '/' : $scriptDir . '/');
             height: 100%;
             object-fit: contain;
             display: block;
+            border-radius: 8px;
         }
 
         .dragonBody {
@@ -327,14 +353,21 @@ $baseHref = ($scriptDir === '/' ? '/' : $scriptDir . '/');
             position: fixed;
             top: 12px;
             right: 74px;
-            padding: 6px 10px;
-            border: 2px solid #94a3b8;
-            background: #fff;
+            padding: 8px 14px;
+            border: none;
+            background: linear-gradient(135deg, #f1f5f9 0%, #e2e8f0 100%);
             color: #0f172a;
             font-weight: 700;
             cursor: pointer;
-            border-radius: 8px;
+            border-radius: 10px;
             z-index: 16;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+            transition: all 0.2s ease;
+        }
+
+        .dragonToggleBtn:hover {
+            background: linear-gradient(135deg, #e2e8f0 0%, #cbd5e1 100%);
+            transform: translateY(-1px);
         }
     </style>
 </head>
@@ -627,8 +660,18 @@ $baseHref = ($scriptDir === '/' ? '/' : $scriptDir . '/');
             setTimeout(focusWorkframe, 50);
         });
 
+        function clearWorkframe() {
+            // iframeをクリアしてabout:blankに戻す
+            if (iframeEl) {
+                iframeEl.src = 'about:blank';
+            }
+        }
+
         function loadFrameForSelection() {
-            if (!currentMonbell || !currentCarriro) return;
+            if (!currentMonbell || !currentCarriro) {
+                clearWorkframe();
+                return;
+            }
             waitingFirstLoad = true;
             showPlaceholder();
             const upperCate = currentCarriro.toUpperCase();
@@ -835,6 +878,8 @@ $baseHref = ($scriptDir === '/' ? '/' : $scriptDir . '/');
             }
             persistSessionMonbell(value);
             currentCarriro = '';
+            // モデル切り替え時はiframeをクリア（カテゴリ未選択状態にする）
+            clearWorkframe();
             renderButtons(modelList, 'modelBtns', 'monbell', currentMonbell, selectModel);
             updateModelAlert();
             categoryList = buildCategoryEntries(categoryMap[value] || []);

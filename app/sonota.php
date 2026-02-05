@@ -27,6 +27,9 @@ $initialSerial = isset($_SESSION['sierra']) ? trim((string)$_SESSION['sierra']) 
             --gap: 14px;
             --pad: 12px;
             --radius: 12px;
+            --radius-sm: 8px;
+            --radius-lg: 16px;
+            --radius-xl: 20px;
             --font-scale: 1.3;
             --bg: #f4f5fb;
             --card: #fff;
@@ -37,6 +40,7 @@ $initialSerial = isset($_SESSION['sierra']) ? trim((string)$_SESSION['sierra']) 
             --danger: #b91c1c;
             --bd: #e5e7eb;
             --shadow: 0 6px 18px rgba(0, 0, 0, .06);
+            --shadow-lg: 0 10px 30px rgba(0, 0, 0, .1);
         }
 
         html {
@@ -149,80 +153,125 @@ $initialSerial = isset($_SESSION['sierra']) ? trim((string)$_SESSION['sierra']) 
 
         input[type="text"] {
             min-height: 48px;
-            padding: 10px 12px;
-            border: 2px solid #0f172a;
-            border-radius: 0;
+            padding: 10px 14px;
+            border: 2px solid #cbd5e1;
+            border-radius: var(--radius-sm);
             font-size: 1em;
             background: #fff;
             min-width: 260px;
+            transition: border-color 0.2s, box-shadow 0.2s;
+        }
+
+        input[type="text"]:focus {
+            outline: none;
+            border-color: var(--accent);
+            box-shadow: 0 0 0 3px rgba(14, 122, 254, 0.15);
         }
 
         .btn {
             min-height: 48px;
-            padding: 12px 18px;
-            border-radius: 0;
-            border: 2px solid #0f172a;
+            padding: 12px 20px;
+            border-radius: var(--radius-sm);
+            border: 2px solid #e2e8f0;
             background: #fff;
             color: #0f172a;
             font-weight: 700;
             cursor: pointer;
             font-size: 1em;
+            transition: all 0.2s ease;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+        }
+
+        .btn:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+        }
+
+        .btn:active {
+            transform: translateY(0);
         }
 
         .btn.tiny {
             min-height: 40px;
-            padding: 8px 10px;
+            padding: 8px 12px;
             font-size: .9em;
             background: #fff;
+            border-radius: var(--radius-sm);
         }
         #btnEnd {
             min-height: 160px;
             padding: 16px 12px;
             font-size: 1.9em;
             letter-spacing: 0.08em;
-            border: 4px solid #169d26ff;
-            background: #319929ff;
-            color: #ffffffff;
+            border: none;
+            background: linear-gradient(135deg, #22c55e 0%, #16a34a 100%);
+            color: #fff;
+            border-radius: var(--radius-lg);
+            box-shadow: 0 8px 20px rgba(22, 163, 74, 0.35);
+            transition: all 0.25s ease;
+        }
+
+        #btnEnd:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 12px 28px rgba(22, 163, 74, 0.45);
         }
 
         .btn.ghost {
-            background: #22872cff;
+            background: linear-gradient(135deg, #22c55e 0%, #16a34a 100%);
             min-height: 60px;
-            padding: 8px 10px;
+            padding: 8px 12px;
             font-size: .9em;
-            border-color: #ffffffff;
+            border: none;
             color: #fff;
+            border-radius: var(--radius-sm);
+            box-shadow: 0 4px 12px rgba(22, 163, 74, 0.25);
+        }
+
+        .btn.ghost:hover {
+            box-shadow: 0 6px 16px rgba(22, 163, 74, 0.35);
         }
 
         /* クリアボタン専用（ghost + tiny）: 背景は白、文字は黒 */
         .btn.ghost.tiny {
             background: #fff;
             color: #0f172a;
-            border-color: #0f172a;
+            border: 2px solid #e2e8f0;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
         }
 
         .btn.good {
-            background: #111827;
-            border-color: #111827;
+            background: linear-gradient(135deg, #1f2937 0%, #111827 100%);
+            border: none;
             color: #fff;
+            box-shadow: 0 4px 12px rgba(17, 24, 39, 0.25);
+        }
+
+        .btn.good:hover {
+            box-shadow: 0 6px 16px rgba(17, 24, 39, 0.35);
         }
 
         .btn.danger {
-            background: #f97316;
-            border-color: #c2410c;
+            background: linear-gradient(135deg, #f97316 0%, #ea580c 100%);
+            border: none;
             color: #fff;
+            box-shadow: 0 4px 12px rgba(234, 88, 12, 0.3);
+        }
+
+        .btn.danger:hover {
+            box-shadow: 0 6px 16px rgba(234, 88, 12, 0.4);
         }
 
         .serialChip {
-            padding: 10px 16px;
-            border-radius: 0;
-            background: #1d4ed8;
+            padding: 12px 20px;
+            border-radius: var(--radius-lg);
+            background: linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%);
             color: #fff;
             font-weight: 700;
             min-width: 240px;
             text-align: center;
             margin-bottom: 12px;
             letter-spacing: 0.04em;
+            box-shadow: 0 4px 12px rgba(29, 78, 216, 0.3);
         }
 
         .serialHint {
@@ -259,10 +308,18 @@ $initialSerial = isset($_SESSION['sierra']) ? trim((string)$_SESSION['sierra']) 
             width: 100%;
             min-width: 0;
             padding: 11px 13px;
-            border: 2px solid #0f172a;
-            border-radius: 0;
-            background: #f1f5f9;
+            border: 2px solid #cbd5e1;
+            border-radius: var(--radius-sm);
+            background: #f8fafc;
             font-size: 1.3em;
+            transition: border-color 0.2s, box-shadow 0.2s;
+        }
+
+        .scanField input:focus {
+            outline: none;
+            border-color: var(--accent);
+            box-shadow: 0 0 0 3px rgba(14, 122, 254, 0.15);
+            background: #fff;
         }
 
         .scanInputRow {
@@ -282,19 +339,20 @@ $initialSerial = isset($_SESSION['sierra']) ? trim((string)$_SESSION['sierra']) 
         }
 
         .heroNotice {
-            border-radius: 0;
-            padding: 12px;
-            background: linear-gradient(135deg, #0ea5e9, #0284c7);
+            border-radius: var(--radius-lg);
+            padding: 14px 16px;
+            background: linear-gradient(135deg, #0ea5e9 0%, #0284c7 100%);
             color: #fff;
             font-size: 1.7em;
             font-weight: 600;
             text-align: center;
             letter-spacing: 0.02em;
-            box-shadow: 0 10px 24px rgba(0, 0, 0, 0.16);
+            box-shadow: 0 10px 24px rgba(2, 132, 199, 0.25);
         }
 
         .heroNotice.state-manual {
-            background: linear-gradient(135deg, #20096bff, #3a36afff);
+            background: linear-gradient(135deg, #6366f1 0%, #4f46e5 100%);
+            box-shadow: 0 10px 24px rgba(79, 70, 229, 0.25);
         }
 
         .msgArea {
@@ -330,14 +388,15 @@ $initialSerial = isset($_SESSION['sierra']) ? trim((string)$_SESSION['sierra']) 
         }
 
         .box {
-            border: 2px solid #1f2937;
-            border-radius: 0;
+            border: 2px solid #e2e8f0;
+            border-radius: var(--radius);
             padding: 14px;
             min-height: 120px;
             display: flex;
             flex-direction: column;
             gap: 10px;
-            background: #fdfdfd;
+            background: #fff;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
         }
 
         .chipList {
@@ -368,27 +427,47 @@ $initialSerial = isset($_SESSION['sierra']) ? trim((string)$_SESSION['sierra']) 
             align-items: center;
             justify-content: left;
             text-align: left;
-            border: 0;
-            border-radius: 0;
-            padding: 8px 12px;
-            background: #1f2937;
+            border: none;
+            border-radius: var(--radius-sm);
+            padding: 10px 14px;
+            background: linear-gradient(135deg, #374151 0%, #1f2937 100%);
             color: #fff;
             font-weight: 580;
             font-size: 1em;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+        }
+
+        .chip.block:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.15);
         }
 
         .chip.block.active {
-            background: #0ea5e9;
+            background: linear-gradient(135deg, #0ea5e9 0%, #0284c7 100%);
+            box-shadow: 0 4px 12px rgba(14, 165, 233, 0.35);
         }
 
         .chipClear {
             margin-left: 8px;
-            padding: 4px 10px;
-            border: 1px solid #0f172a;
-            background: #fff;
-            color: #0f172a;
+            padding: 5px 10px;
+            border: 2px solid #dc2626;
+            border-radius: var(--radius-sm);
+            background: linear-gradient(135deg, #fee2e2 0%, #fecaca 100%);
+            color: #dc2626;
             cursor: pointer;
-            font-weight: 700;
+            font-weight: 800;
+            font-size: 0.85em;
+            transition: all 0.2s ease;
+            box-shadow: 0 2px 6px rgba(220, 38, 38, 0.15);
+        }
+
+        .chipClear:hover {
+            background: linear-gradient(135deg, #fecaca 0%, #fca5a5 100%);
+            border-color: #b91c1c;
+            transform: translateY(-1px);
+            box-shadow: 0 4px 10px rgba(220, 38, 38, 0.25);
         }
 
         .selectionInfo {
@@ -414,15 +493,18 @@ $initialSerial = isset($_SESSION['sierra']) ? trim((string)$_SESSION['sierra']) 
         }
 
         .logs li {
-            border-bottom: 1px dashed #fdbbbcff;
-            padding: 6px 8px 6px 40px;
+            border-bottom: 1px solid #fecaca;
+            padding: 8px 10px 8px 40px;
             font-weight: 400;
             color: #0f172a;
             position: relative;
-            border-radius: 0;
+            border-radius: var(--radius-sm);
             display: flex;
             align-items: center;
             gap: 8px;
+            background: #fff;
+            margin-bottom: 4px;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
         }
 
         .logs li::before {
@@ -447,11 +529,11 @@ $initialSerial = isset($_SESSION['sierra']) ? trim((string)$_SESSION['sierra']) 
         }
 
         .logDeleteBtn {
-            border: 1px solid #dc2626;
-            background: #ef4444;
+            border: none;
+            background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
             color: #fff;
-            padding: 4px 8px;
-            border-radius: 6px;
+            padding: 4px 10px;
+            border-radius: var(--radius-sm);
             cursor: pointer;
             font-weight: 700;
             font-size: 0.75em;
@@ -459,6 +541,12 @@ $initialSerial = isset($_SESSION['sierra']) ? trim((string)$_SESSION['sierra']) 
             flex-shrink: 0;
             min-width: 40px;
             text-align: center;
+            transition: all 0.2s ease;
+            box-shadow: 0 2px 4px rgba(220, 38, 38, 0.25);
+        }
+
+        .logDeleteBtn:hover {
+            box-shadow: 0 4px 8px rgba(220, 38, 38, 0.35);
         }
 
         @media (max-width: 1024px) {
@@ -499,9 +587,9 @@ $initialSerial = isset($_SESSION['sierra']) ? trim((string)$_SESSION['sierra']) 
             text-align: center;
             color: #475569;
             padding: 16px;
-            border: 1px dashed rgba(15, 23, 42, 0.2);
-            border-radius: 0;
-            background: rgba(255, 255, 255, 0.4);
+            border: 2px dashed #e2e8f0;
+            border-radius: var(--radius);
+            background: rgba(255, 255, 255, 0.6);
         }
 
         /* ===== キーボードピッカー ===== */
@@ -514,18 +602,20 @@ $initialSerial = isset($_SESSION['sierra']) ? trim((string)$_SESSION['sierra']) 
 
         .keyboard-picker-btn {
             border-style: dashed;
-            padding: 6px 8px;
+            padding: 6px 10px;
             font-size: 0.9em;
+            border-radius: var(--radius-sm);
         }
 
         .keypicker-backdrop {
             position: fixed;
             inset: 0;
-            background: rgba(0, 0, 0, 0.45);
+            background: rgba(0, 0, 0, 0.5);
             display: flex;
             align-items: center;
             justify-content: center;
             z-index: 9999;
+            backdrop-filter: blur(4px);
         }
 
         .keypicker-backdrop.hidden {
@@ -534,14 +624,14 @@ $initialSerial = isset($_SESSION['sierra']) ? trim((string)$_SESSION['sierra']) 
 
         .keypicker-dialog {
             background: #fff;
-            border-radius: 0;
-            padding: 16px;
+            border-radius: var(--radius-lg);
+            padding: 20px;
             width: 90vw;
             min-width: 1100px;
             max-width: 1600px;
             max-height: 90vh;
             overflow: auto;
-            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+            box-shadow: 0 20px 50px rgba(0, 0, 0, 0.25);
             display: flex;
             flex-direction: column;
             gap: 8px;
@@ -583,28 +673,31 @@ $initialSerial = isset($_SESSION['sierra']) ? trim((string)$_SESSION['sierra']) 
             flex: 0 0 auto;
             min-width: 40px;
             padding: 6px 4px;
-            border-radius: 0;
-            border: 1px solid #ccc;
+            border-radius: 6px;
+            border: 1px solid #e2e8f0;
             font-size: 11px;
             text-align: center;
             cursor: pointer;
             user-select: none;
-            background: #f7f7f7;
+            background: #f8fafc;
             display: inline-flex;
             align-items: center;
             justify-content: center;
             white-space: nowrap;
+            transition: all 0.15s ease;
         }
 
         .key-button:hover {
-            background: #e0ebff;
-            border-color: #5b8def;
+            background: #e0f2fe;
+            border-color: #38bdf8;
+            transform: translateY(-1px);
         }
 
         .key-button.active {
-            background: #5b8def;
+            background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
             color: #fff;
-            border-color: #2b5bd8;
+            border-color: #2563eb;
+            box-shadow: 0 2px 6px rgba(37, 99, 235, 0.35);
         }
 
         .key-wide-1_5 {
@@ -686,24 +779,55 @@ $initialSerial = isset($_SESSION['sierra']) ? trim((string)$_SESSION['sierra']) 
             min-height: 120px; /* 2倍以上に拡大 */
             font-size: 1.6em; /* 1.5倍に拡大 (1.05 → 1.6) */
             flex: 1 1 0;
-            border-radius: 8px;
-            border: 2px solid #ea580c;
-            background: linear-gradient(180deg, #f97316 0%, #ea580c 100%);
+            border-radius: var(--radius-lg);
+            border: none;
+            background: linear-gradient(135deg, #f97316 0%, #ea580c 100%);
             color: #fff;
             font-weight: 800;
-            box-shadow: 0 8px 16px rgba(0, 0, 0, 0.18);
+            box-shadow: 0 8px 20px rgba(234, 88, 12, 0.35);
+            transition: all 0.25s ease;
         }
+
+        .actionBtn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 12px 28px rgba(234, 88, 12, 0.45);
+        }
+
         /* 登録ボタン用の色を優先適用（.btn.good の黒を上書き） */
         .btn.good.actionBtn {
-            background: linear-gradient(180deg, #f97316 0%, #ea580c 100%);
-            border-color: #ea580c;
+            background: linear-gradient(135deg, #f97316 0%, #ea580c 100%);
+            border: none;
             color: #fff;
+            box-shadow: 0 8px 20px rgba(234, 88, 12, 0.35);
+        }
         }
 
         @media (max-width: 1024px) {
             .rightButtons {
                 flex-direction: column;
             }
+        }
+
+        /* カテゴリ未選択時のプレースホルダー */
+        .noCategoryPlaceholder {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            min-height: 60vh;
+            padding: 40px;
+        }
+        .noCategoryMessage {
+            text-align: center;
+            color: var(--muted);
+            font-size: 1.2em;
+        }
+        .noCategoryMessage svg {
+            margin-bottom: 16px;
+            opacity: 0.5;
+        }
+        .noCategoryMessage p {
+            margin: 0;
+            font-weight: 600;
         }
     </style>
 </head>
@@ -714,7 +838,15 @@ $initialSerial = isset($_SESSION['sierra']) ? trim((string)$_SESSION['sierra']) 
     <div class="page">
         <span id="cat-pill" class="sr-only">未選択</span>
 
-        <div class="wrap">
+        <!-- カテゴリ未選択時のプレースホルダー -->
+        <div id="noCategoryPlaceholder" class="noCategoryPlaceholder" style="display: none;">
+            <div class="noCategoryMessage">
+                <svg width="48" height="48" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/></svg>
+                <p>カテゴリを選択してください</p>
+            </div>
+        </div>
+
+        <div class="wrap" id="mainContentWrap">
             <div class="manualStack">
                 <section class="panel manualPanel">
                     <div id="serialPane">
@@ -2108,7 +2240,34 @@ $initialSerial = isset($_SESSION['sierra']) ? trim((string)$_SESSION['sierra']) 
 
         // 自動カテゴリ遷移・親連動機能は無効化
 
+        // カテゴリ未選択時の表示制御
+        const noCategoryPlaceholder = el('noCategoryPlaceholder');
+        const mainContentWrap = el('mainContentWrap');
+        function updateCategoryVisibility(hasCategory) {
+            if (noCategoryPlaceholder && mainContentWrap) {
+                if (hasCategory) {
+                    noCategoryPlaceholder.style.display = 'none';
+                    mainContentWrap.style.display = '';
+                } else {
+                    noCategoryPlaceholder.style.display = 'flex';
+                    mainContentWrap.style.display = 'none';
+                }
+            }
+        }
+
         async function boot() {
+            const initialCarriro = document.body.dataset.initCarriro || '';
+            const initialMonbell = document.body.dataset.initMonbell || '';
+            const initialSerial = document.body.dataset.initSerial || '';
+
+            // カテゴリが未選択の場合は入力エリアを非表示にしてフォーカスしない
+            if (!initialCarriro) {
+                updateCategoryVisibility(false);
+                return; // カテゴリ未選択なので初期化を中断
+            }
+
+            updateCategoryVisibility(true);
+
             if (initialMonbell) {
                 try {
                     await api('set_model', {
@@ -2139,9 +2298,6 @@ $initialSerial = isset($_SESSION['sierra']) ? trim((string)$_SESSION['sierra']) 
             await refreshLogs();
             focusSerialField();
         }
-
-        const initialCarriro = document.body.dataset.initCarriro || '';
-        const initialMonbell = document.body.dataset.initMonbell || '';
 
         el('btnRegister').addEventListener('click', handleRegister);
         el('btnEnd').addEventListener('click', handleEnd);
