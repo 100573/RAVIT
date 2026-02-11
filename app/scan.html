@@ -31,7 +31,7 @@
       /* QRのサイズ */
       --gap-1: 3mm;
       /* ブロック間の隙間 */
-      --gap-2: 2mm;
+      --gap-2: 3mm;
       /* 行間の隙間 */
     }
 
@@ -138,7 +138,7 @@
       grid-template-columns: 1fr 1fr 1fr;
       column-gap: 1mm;
       font-size: var(--value-font);
-      line-height: 0.55;
+      line-height: 0.9;
     }
 
     .cell.parts {
@@ -151,6 +151,14 @@
 
     .cell.symptom {
       text-align: right;
+    }
+
+    /* 位置と症状カラムを左寄せに調整（約0.7mm） */
+    .cell.pos,
+    .cell.symptom {
+      transform: translateX(-0.7mm);
+      /* transform を使うのでレイアウト崩れを防ぐために表示モードを明示 */
+      display: inline-block;
     }
 
     .cell {

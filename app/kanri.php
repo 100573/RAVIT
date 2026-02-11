@@ -160,6 +160,11 @@ try {
     $resultFilter = strtoupper(trim((string)($_GET['result'] ?? 'ALL')));
     $serialFilter = trim((string)($_GET['serial'] ?? ''));
     $stockFilter = strtoupper(trim((string)($_GET['stock'] ?? 'ALL')));
+    $modelFilter = trim((string)($_GET['model'] ?? ''));
+
+    // モデル（partsno）一覧を取得
+    $modelListSql = "SELECT DISTINCT COALESCE(NULLIF(partsno, ''), '未設定') AS model FROM boxid ORDER BY model";
+    $modelList = $pdo->query($modelListSql)->fetchAll(PDO::FETCH_COLUMN) ?: [];
 
     $summarySql = "SELECT
         COUNT(*) AS total_count,
@@ -171,6 +176,17 @@ try {
     $okCount = (int)($summaryRow['ok_count'] ?? 0);
     $ngCount = (int)($summaryRow['ng_count'] ?? 0);
     $otherCount = max(0, $totalCount - $okCount - $ngCount);
+
+    // モデル（partsno）別集計
+    $modelSummarySql = "SELECT
+        COALESCE(NULLIF(partsno, ''), '未設定') AS model,
+        COUNT(*) AS total_count,
+        SUM(CASE WHEN result = 'OK' THEN 1 ELSE 0 END) AS ok_count,
+        SUM(CASE WHEN result = 'NG' THEN 1 ELSE 0 END) AS ng_count
+        FROM boxid
+        GROUP BY COALESCE(NULLIF(partsno, ''), '未設定')
+        ORDER BY total_count DESC";
+    $modelSummaryRows = $pdo->query($modelSummarySql)->fetchAll(PDO::FETCH_ASSOC) ?: [];
 
     $rows = [];
     $filters = [];
@@ -185,6 +201,14 @@ try {
         $filters[] = 'serial LIKE :serial';
         $params[':serial'] = '%' . $serialFilter . '%';
     }
+    if ($modelFilter !== '' && $modelFilter !== 'ALL') {
+        if ($modelFilter === '未設定') {
+            $filters[] = "(partsno IS NULL OR partsno = '')";
+        } else {
+            $filters[] = 'partsno = :model';
+            $params[':model'] = $modelFilter;
+        }
+    }
     if ($dateFrom !== '') {
         $filters[] = 'regtime >= :date_from';
         $params[':date_from'] = $dateFrom . ' 00:00:00';
@@ -194,7 +218,7 @@ try {
         $params[':date_to'] = $dateTo . ' 23:59:59';
     }
 
-    $sql = 'SELECT serial, box, result, regtime FROM boxid';
+    $sql = 'SELECT serial, box, partsno, result, regtime FROM boxid';
     if (!empty($filters)) {
         $sql .= ' WHERE ' . implode(' AND ', $filters);
     }
@@ -314,17 +338,61 @@ try {
         'inventory' => $inventory,
     ];
 
+    // モデル別の在庫計算（Oracle使用済み情報を考慮）
+    $modelStats = [];
+    foreach ($modelSummaryRows as $mRow) {
+        $model = $mRow['model'];
+        $mTotal = (int)($mRow['total_count'] ?? 0);
+        $mOk = (int)($mRow['ok_count'] ?? 0);
+        $mNg = (int)($mRow['ng_count'] ?? 0);
+        $mOther = max(0, $mTotal - $mOk - $mNg);
+        $mOkRate = $mTotal > 0 ? round(($mOk / $mTotal) * 100, 1) : 0.0;
+        $mNgRate = $mTotal > 0 ? round(($mNg / $mTotal) * 100, 1) : 0.0;
+        
+        // モデルごとの使用済み数を計算
+        $mUsed = null;
+        $mInventory = null;
+        if ($oracle['available'] && !empty($usedSetAll)) {
+            // このモデルのOKシリアルを取得して使用済みをカウント
+            $modelOkStmt = $pdo->prepare("SELECT serial FROM boxid WHERE result = 'OK' AND COALESCE(NULLIF(partsno, ''), '未設定') = :model");
+            $modelOkStmt->execute([':model' => $model]);
+            $modelOkSerials = $modelOkStmt->fetchAll(PDO::FETCH_COLUMN) ?: [];
+            $mUsed = 0;
+            foreach ($modelOkSerials as $ser) {
+                if (isset($usedSetAll[$ser])) {
+                    $mUsed++;
+                }
+            }
+            $mInventory = max(0, $mOk - $mUsed);
+        }
+        
+        $modelStats[] = [
+            'model' => $model,
+            'total' => $mTotal,
+            'ok' => $mOk,
+            'ng' => $mNg,
+            'other' => $mOther,
+            'ok_rate' => $mOkRate,
+            'ng_rate' => $mNgRate,
+            'used' => $mUsed,
+            'inventory' => $mInventory,
+        ];
+    }
+
     json_response([
         'ok' => true,
         'summary' => $summary,
         'oracle' => $oracle,
         'rows' => $rows,
         'lists' => $lists,
+        'model_stats' => $modelStats,
+        'model_list' => $modelList,
         'filters' => [
             'date_from' => $dateFrom,
             'date_to' => $dateTo,
             'list_limit' => $listLimit,
             'stock' => $stockFilter,
+            'model' => $modelFilter,
         ],
     ]);
 } catch (Throwable $e) {

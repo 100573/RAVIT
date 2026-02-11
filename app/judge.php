@@ -340,6 +340,26 @@ $judgeRequiredCategories = judge_required_categories_from_config();
             min-height: 0;
             overflow: hidden;
         }
+        .serialCountDisplay {
+            margin-top: 8px;
+            font-size: 28px;
+            font-weight: 900;
+            color: #0f172a;
+            text-align: center;
+            padding: 8px 6px;
+        }
+        /* シリアル表示時に右パネルを強調 */
+        .logsPanel.serialFull {
+            background: linear-gradient(90deg,#e6f0ff 0%, #e6f7ff 100%);
+            box-shadow: 0 8px 22px rgba(59,130,246,0.12);
+            border-radius: 8px;
+        }
+        /* シリアル表示時に右パネルを強調 */
+        .logsPanel.serialFull {
+            background: linear-gradient(90deg,#e6f0ff 0%, #e6f7ff 100%);
+            box-shadow: 0 8px 22px rgba(59,130,246,0.12);
+            border-radius: 8px;
+        }
 
         .boxPanel {
             flex: 0 0 260px;
@@ -514,6 +534,11 @@ $judgeRequiredCategories = judge_required_categories_from_config();
         .err.is-error {
             color: #b91c1c;
         }
+        /* 特定の重要メッセージを目立たせる（既存サイズの1.5倍） */
+        .err.large-msg {
+            font-size: 2.05em; /* 1.5 * 1.5em */
+            font-weight: 600;
+        }
     </style>
 </head>
 
@@ -572,7 +597,7 @@ $judgeRequiredCategories = judge_required_categories_from_config();
             <!-- OK/NG 大表示 -->
             <div id="judgeBox" class="boxJudge wait">
                 <div>待機</div>
-                <div class="judgeSub">シリアルを入力してください</div>
+               <!-- <div class="judgeSub">シリアルを入力してください</div> -->
             </div>
 
 
@@ -596,6 +621,7 @@ $judgeRequiredCategories = judge_required_categories_from_config();
                             <tbody id="fails"></tbody>
                         </table>
                     </div>
+                    <div id="serialCountDisplay" class="serialCountDisplay" aria-live="polite"></div>
                 </div>
             </aside>
             <section class="panel boxPanel">
@@ -630,14 +656,34 @@ $judgeRequiredCategories = judge_required_categories_from_config();
             if (msg === '') {
                 target.textContent = '';
                 target.classList.remove('is-error');
+                target.classList.remove('large-msg');
                 return;
             }
+            // 判定対象となる重要メッセージ（大きく表示する）
+            // 表記ゆれを避けるため、よく使われる文言のバリエーションを列挙する
+            const largePhrases = [
+                '外観検査が完了していません',
+                '全検査完了',
+                'シリアルを読んでください',
+                'シリアルをスキャンしてください',
+                '印刷するシリアルを入力してください',
+                '箱のQRをスキャンしてください',
+                '箱のQRを読んでください',
+                'boxidを入力してください',
+                'BOXIDを入力してください'
+            ];
+            const isLarge = largePhrases.some(p => msg.includes(p));
+
             if (isError) {
                 target.textContent = `【ERROR】：${msg}`;
                 target.classList.add('is-error');
+                // エラーは重要案内と同じ大きさで表示する
+                target.classList.add('large-msg');
             } else {
                 target.textContent = msg;
                 target.classList.remove('is-error');
+                if (isLarge) target.classList.add('large-msg');
+                else target.classList.remove('large-msg');
             }
         };
         const PRINT_PAGE_URL = 'scan.html';
@@ -701,13 +747,74 @@ $judgeRequiredCategories = judge_required_categories_from_config();
             const serialField = el('serial');
             const serial = (serialField?.value || '').trim();
             if (!serial) {
-                setErr('印刷するシリアルを入力してください', true);
+                // 待機中（待機表示）のときは印刷ダイアログ用の案内メッセージを出さず
+                // 単にシリアル入力へフォーカスするだけにする
+                const isWait = (() => { try { return el('judgeBox')?.classList.contains('wait'); } catch (e) { return false; } })();
+                if (!isWait) {
+                    setErr('印刷するシリアルを入力してください', true);
+                }
                 focusSerialField();
                 return;
             }
+            // 直近に同じシリアルで印刷を行っていれば再オープンを防止（60秒以内）
+            const now = Date.now();
+            if (lastPrintedSerial === serial && (now - lastPrintTime) < 60000) {
+                console.debug('skip openPrintPage: recent print exists for', serial);
+                return;
+            }
             const url = `${PRINT_PAGE_URL}?serial=${encodeURIComponent(serial)}&ts=${Date.now()}`;
-            window.open(url, '_blank');
+            try {
+                const w = window.open(url, '_blank');
+                if (w) {
+                    lastPrintedSerial = serial;
+                    lastPrintTime = Date.now();
+                    pendingPrint = true;
+                    try { sessionStorage.setItem('pendingPrint', '1'); } catch (e) {}
+                    // ポップアップが閉じられたらboxidにフォーカス
+                    const watcher = setInterval(() => {
+                        try {
+                            if (w.closed) {
+                                clearInterval(watcher);
+                                pendingPrint = false;
+                                try { sessionStorage.removeItem('pendingPrint'); } catch (e) {}
+                                // ここではEnter送信は行わず単にフォーカス
+                                focusBoxInput(false);
+                                // allow future prints for same serial after closed
+                                lastPrintedSerial = null;
+                                lastPrintTime = 0;
+                            }
+                        } catch (e) {
+                            // ignore cross-origin access issues
+                        }
+                    }, 500);
+                } else {
+                    // ポップアップがブロックされた場合は sessionStorage にフラグを立てておく
+                    pendingPrint = true;
+                    try { sessionStorage.setItem('pendingPrint', '1'); } catch (e) {}
+                }
+            } catch (e) {
+                console.warn('openPrintPage failed', e);
+            }
         };
+
+        // 印刷ページから戻ってきた時にフォーカスを boxid に移す
+        const clearPendingAndFocus = () => {
+            const stored = (() => { try { return sessionStorage.getItem('pendingPrint'); } catch (e) { return null; } })();
+            if (pendingPrint || stored === '1') {
+                pendingPrint = false;
+                try { sessionStorage.removeItem('pendingPrint'); } catch (e) {}
+                // 印刷から戻ってきたときはEnter送信せず単にフォーカス
+                focusBoxInput(false);
+            }
+        };
+        window.addEventListener('focus', clearPendingAndFocus);
+        // visibilitychange/pageshow を使ったフォールバック（ブラウザによっては focus が来ない場合があるため）
+        document.addEventListener('visibilitychange', () => {
+            if (document.visibilityState === 'visible') clearPendingAndFocus();
+        });
+        window.addEventListener('pageshow', (ev) => {
+            clearPendingAndFocus();
+        });
         const normalizeModel = (value) => {
             if (typeof value !== 'string') return '';
             return value.trim().toUpperCase();
@@ -720,6 +827,12 @@ $judgeRequiredCategories = judge_required_categories_from_config();
         let showAllModels = false;
         let requiredCateEnd = Array.isArray(defaultRequiredCateEnd) ? [...defaultRequiredCateEnd] : [];
         let currentSerialValue = '';
+        const MAX_SLOTS = 5; // 最大台数（UI表示用）
+        // 印刷後に戻ってきたときに boxid にフォーカスするためのフラグ
+        let pendingPrint = false;
+        // 最後に印刷を行ったシリアルとタイムスタンプ（連続オープン防止用）
+        let lastPrintedSerial = null;
+        let lastPrintTime = 0;
         let judgeStatusTimer = null;
         let judgeRunToken = 0; // 実行中判定のキャンセル用
         let lastSuccessSerial = '';
@@ -937,6 +1050,15 @@ $judgeRequiredCategories = judge_required_categories_from_config();
                 return;
             }
             currentSerialValue = serial;
+            // シリアル保存されたら、NGやエラー表示に関わらず不良一覧を即表示する
+            try {
+                const earlyLogs = await api('get_total_logs');
+                if (earlyLogs?.ok) {
+                    renderFails(earlyLogs.result?.showlogs || []);
+                }
+            } catch (e) {
+                console.warn('early get_total_logs failed', e);
+            }
 
             let forcedCateNg = false;
             let forcedCateMsg = '';
@@ -950,7 +1072,7 @@ $judgeRequiredCategories = judge_required_categories_from_config();
                 if (!cateRes.ok) {
                     setErr(cateRes.error || '全検査確認でエラーが発生しました', true);
                     renderJudge('NG');
-                    renderFails([]);
+                    // エラーでも既に取得済みの不良一覧は消さない
                     return;
                 }
                 if (canceled()) return;
@@ -981,7 +1103,7 @@ $judgeRequiredCategories = judge_required_categories_from_config();
             if (!res.ok) {
                 setErr(res.error || '判定エラー', true);
                 renderJudge('NG');
-                renderFails([]);
+                // 判定APIエラーでも、既に表示している不良一覧は維持する
                 return;
             }
 
@@ -1004,9 +1126,18 @@ $judgeRequiredCategories = judge_required_categories_from_config();
             });
             renderJudge(hasNg ? 'NG' : 'OK');
 
-            // NGの場合は自動で印刷ページを開く
+            // NGの場合は自動で印刷ページを開き、同時にBOXIDへフォーカスする
             if (hasNg) {
                 openPrintPage();
+                // 印刷ポップアップを開きつつ、入力作業のため即座にBOXIDへフォーカス（Enterは送らない）
+                try {
+                    // 少し遅らせて呼ぶことで、ブラウザのopen処理と干渉しにくくする
+                    setTimeout(() => {
+                        focusBoxInput(false);
+                    }, 50);
+                } catch (e) {
+                    console.warn('focusBoxInput failed after NG print', e);
+                }
                 return;
             }
 
@@ -1073,6 +1204,12 @@ $judgeRequiredCategories = judge_required_categories_from_config();
                 box.innerHTML = `<div>完了</div><div class="judgeSub">"${serial}　→ ${boxid}"</div>`;
                 box.classList.add('success');
                 judgeStatusTimer = setTimeout(() => renderJudge('待機'), 4000);
+                // 成功表示の間、該当BOXに紐づくシリアル一覧を取得して表示する
+                if (lastSuccessBoxid) {
+                    try {
+                        refreshBoxSerials(lastSuccessBoxid).catch(err => console.warn('refreshBoxSerials failed', err));
+                    } catch (e) { console.warn(e); }
+                }
             } else {
                 box.innerHTML = '<div>待機</div><div class="judgeSub">シリアルを入力してください</div>';
                 box.classList.add('wait');
@@ -1082,6 +1219,16 @@ $judgeRequiredCategories = judge_required_categories_from_config();
         function renderFails(rows) {
             const tb = el('fails');
             tb.innerHTML = '';
+            // 通常の不良一覧表示に戻す際は強調を解除
+            const logsPanelEl = document.querySelector('.logsPanel');
+            if (logsPanelEl && logsPanelEl.classList.contains('serialFull')) {
+                logsPanelEl.classList.remove('serialFull');
+            }
+
+            // シリアルカウント表示をクリア
+            const sc = document.getElementById('serialCountDisplay');
+            if (sc) sc.textContent = '';
+
             rows.forEach(r => {
                 const tr = document.createElement('tr');
                 tr.innerHTML = `<td>${r.cate ?? '-'}</td>
@@ -1091,6 +1238,44 @@ $judgeRequiredCategories = judge_required_categories_from_config();
                     <td>${r.flag ?? '-'}</td>`;
                 tb.appendChild(tr);
             });
+        }
+
+        // シリアル一覧を取得して右パネルに描画する
+        async function refreshBoxSerials(box, limit = 5) {
+            if (!box) return;
+            const logsPanelEl = document.querySelector('.logsPanel');
+            try {
+                const res = await api('judge_box_serials', { box, limit });
+                const rows = res.result?.rows || [];
+                const tb = el('fails');
+                if (!tb) return;
+                tb.innerHTML = '';
+                if (!rows.length) {
+                    const tr = document.createElement('tr');
+                    tr.innerHTML = `<td colspan="5">該当するシリアルはありません</td>`;
+                    tb.appendChild(tr);
+                } else {
+                    rows.slice(0, limit).forEach(r => {
+                        const tr = document.createElement('tr');
+                        const serialText = r.serial ?? '-';
+                        const resultText = r.result ?? '';
+                        const timeText = r.regtime ?? '';
+                        tr.innerHTML = `<td colspan="3"><strong>${serialText}</strong></td><td>${resultText}</td><td>${timeText}</td>`;
+                        tb.appendChild(tr);
+                    });
+                }
+                        // 更新されたシリアル件数を下部に大きく表示
+                        const sc = document.getElementById('serialCountDisplay');
+                        if (sc) {
+                            const count = Math.min(rows.length, limit);
+                            sc.textContent = `${count}/${MAX_SLOTS}台`;
+                        }
+                        if (logsPanelEl) {
+                            logsPanelEl.classList.add('serialFull');
+                        }
+            } catch (err) {
+                console.warn('judge_box_serials failed', err);
+            }
         }
 
         async function refreshBoxHistory() {
@@ -1297,12 +1482,14 @@ $judgeRequiredCategories = judge_required_categories_from_config();
                 return;
             }
             if (!serial) {
-                setErr('シリアルを読んでください', true);
+                // シリアル未入力時は赤いエラープレフィックスを出さない（黒い案内のみ）
+                setErr('シリアルを読んでください', false);
                 el('serial').focus();
                 return;
             }
             if (!box) {
-                setErr('BOXIDを入力してください', false);
+                // 表示文言を小文字に統一し、既定の大きさルールに従わせる
+                setErr('boxidを入力してください', false);
                 el('boxid').focus();
                 return;
             }
@@ -1357,7 +1544,6 @@ $judgeRequiredCategories = judge_required_categories_from_config();
             currentSerialValue = '';
             el('serial').focus();
             el('boxid').value = '';
-            renderFails([]);
             setBoxInputEnabled(false);
         }
         el('boxid').addEventListener('keydown', e => {
@@ -1370,6 +1556,22 @@ $judgeRequiredCategories = judge_required_categories_from_config();
         // 初期表示時にシリアルへフォーカス
         document.addEventListener('DOMContentLoaded', focusSerialField);
         el('boxid').addEventListener('change', submitBox);
+
+        // BOXID にフォーカスされている時は黒文字で案内を出す
+        el('boxid').addEventListener('focus', () => {
+            const box = el('boxid');
+            if (!box || box.disabled) return;
+            // ユーザ指定の文言（小文字の "boxid" をそのまま使用）
+            setErr('boxidを入力してください', false);
+        });
+        el('boxid').addEventListener('blur', () => {
+            const target = el('errmsg');
+            if (!target) return;
+            // フォーカス時に出した同一メッセージであれば消す
+            if (target.textContent === 'boxidを入力してください') {
+                setErr('');
+            }
+        });
 
         /* ===========================================================
            初期化

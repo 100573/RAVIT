@@ -940,7 +940,28 @@ $baseHref = ($scriptDir === '/' ? '/' : $scriptDir . '/');
                 lastEndedSerial = '';
                 clearCompletedMarks();
             }
-            fetchCompletedCategories(useSerial);
+            // 完了情報を取得してから次の未完了カテゴリに自動で遷移する
+            fetchCompletedCategories(useSerial).then(() => {
+                try {
+                    if (!Array.isArray(categoryList) || categoryList.length === 0) return;
+                    const currentKey = normalizeCateKey(currentCarriro || '');
+                    // 次の未完了（かつ DIAG を除く）カテゴリを探す
+                    const nextEntry = categoryList.find(item => {
+                        const val = (typeof item === 'string') ? item : (item.value ?? item.label ?? '');
+                        const key = normalizeCateKey(val);
+                        if (!key) return false;
+                        if (key === currentKey) return false;
+                        if (key.includes('DIAG')) return false;
+                        return !completedCategories.has(key);
+                    });
+                    if (nextEntry) {
+                        const nextVal = (typeof nextEntry === 'string') ? nextEntry : (nextEntry.value ?? nextEntry.label ?? '');
+                        if (nextVal) selectCategory(nextVal, { force: true });
+                    }
+                } catch (e) {
+                    console.warn('auto-next select failed', e);
+                }
+            }).catch(err => console.warn('fetchCompletedCategories failed', err));
         }
 
         function handleSerialCleared() {

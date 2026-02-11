@@ -69,6 +69,17 @@
       margin-bottom: 20px;
     }
 
+    /* 確実にモデル選択が見えるように調整 */
+    .filters {
+      align-items: center;
+    }
+
+    .filters select {
+      min-width: 140px;
+      max-width: 360px;
+      display: inline-block;
+    }
+
     .card {
       background: var(--card);
       border: 1px solid var(--border);
@@ -221,6 +232,24 @@
       margin-top: 8px;
     }
 
+    .modelSection {
+      margin-top: 24px;
+    }
+
+    .modelTable th,
+    .modelTable td {
+      text-align: right;
+    }
+
+    .modelTable th:first-child,
+    .modelTable td:first-child {
+      text-align: left;
+    }
+
+    .modelTable .model-name {
+      font-weight: 700;
+    }
+
     @media (max-width: 800px) {
       .filters {
         grid-template-columns: 1fr;
@@ -284,6 +313,9 @@
         <option value="STOCK">在庫のみ</option>
         <option value="USED">使用済みのみ</option>
       </select>
+      <select id="modelFilter">
+        <option value="ALL">モデル: 全部</option>
+      </select>
       <input type="date" id="dateFrom" aria-label="登録日(開始)" title="登録日(開始)" />
       <input type="date" id="dateTo" aria-label="登録日(終了)" title="登録日(終了)" />
       <input type="number" id="limitInput" min="1" max="5000" value="200" placeholder="表示件数" />
@@ -297,6 +329,7 @@
       <thead>
         <tr>
           <th>serial</th>
+          <th>モデル</th>
           <th>result</th>
           <th>box</th>
           <th>regtime</th>
@@ -305,6 +338,26 @@
       </thead>
       <tbody id="rows"></tbody>
     </table>
+
+    <div class="sectionTitle">モデル別集計</div>
+    <section class="modelSection">
+      <table class="modelTable">
+        <thead>
+          <tr>
+            <th>モデル</th>
+            <th>総数</th>
+            <th>OK</th>
+            <th>NG</th>
+            <th>その他</th>
+            <th>OK率</th>
+            <th>NG率</th>
+            <th>使用済</th>
+            <th>在庫</th>
+          </tr>
+        </thead>
+        <tbody id="modelRows"></tbody>
+      </table>
+    </section>
 
     <div class="sectionTitle">使用済み / 在庫 シリアル</div>
     <div class="status" id="listStatus">-</div>
@@ -359,9 +412,11 @@
       rows: document.getElementById('rows'),
       usedRows: document.getElementById('usedRows'),
       stockRows: document.getElementById('stockRows'),
+      modelRows: document.getElementById('modelRows'),
       serialFilter: document.getElementById('serialFilter'),
       resultFilter: document.getElementById('resultFilter'),
       stockFilter: document.getElementById('stockFilter'),
+      modelFilter: document.getElementById('modelFilter'),
       dateFrom: document.getElementById('dateFrom'),
       dateTo: document.getElementById('dateTo'),
       limitInput: document.getElementById('limitInput'),
@@ -381,6 +436,22 @@
     function fmtRate(value) {
       if (value === null || value === undefined) return '-';
       return `${Number(value).toFixed(1)}%`;
+    }
+
+    function updateModelFilter(modelList) {
+      const currentValue = els.modelFilter.value;
+      els.modelFilter.innerHTML = '<option value="ALL">モデル: 全部</option>';
+      if (modelList && modelList.length > 0) {
+        modelList.forEach(model => {
+          const opt = document.createElement('option');
+          opt.value = model;
+          opt.textContent = model;
+          if (model === currentValue) {
+            opt.selected = true;
+          }
+          els.modelFilter.appendChild(opt);
+        });
+      }
     }
 
     function renderSummary(summary, oracle) {
@@ -413,7 +484,7 @@
       if (!rows || rows.length === 0) {
         const tr = document.createElement('tr');
         const td = document.createElement('td');
-        td.colSpan = 5;
+        td.colSpan = 6;
         td.textContent = 'データがありません';
         tr.appendChild(td);
         els.rows.appendChild(tr);
@@ -436,6 +507,9 @@
         } else {
           tdSerial.textContent = '';
         }
+
+        const tdModel = document.createElement('td');
+        tdModel.textContent = row.partsno || '未設定';
 
         const tdResult = document.createElement('td');
         const result = (row.result || '').toUpperCase();
@@ -465,6 +539,7 @@
         }
 
         tr.appendChild(tdSerial);
+        tr.appendChild(tdModel);
         tr.appendChild(tdResult);
         tr.appendChild(tdBox);
         tr.appendChild(tdTime);
@@ -510,6 +585,67 @@
       });
     }
 
+    function renderModelStats(modelStats) {
+      els.modelRows.textContent = '';
+      if (!modelStats || modelStats.length === 0) {
+        const tr = document.createElement('tr');
+        const td = document.createElement('td');
+        td.colSpan = 9;
+        td.textContent = 'モデルデータがありません';
+        tr.appendChild(td);
+        els.modelRows.appendChild(tr);
+        return;
+      }
+
+      modelStats.forEach(m => {
+        const tr = document.createElement('tr');
+        tr.style.cursor = 'pointer';
+        tr.addEventListener('click', () => {
+          els.modelFilter.value = m.model;
+          loadData();
+        });
+
+        const tdModel = document.createElement('td');
+        tdModel.className = 'model-name';
+        tdModel.textContent = m.model || '-';
+
+        const tdTotal = document.createElement('td');
+        tdTotal.textContent = fmtNum(m.total);
+
+        const tdOk = document.createElement('td');
+        tdOk.textContent = fmtNum(m.ok);
+
+        const tdNg = document.createElement('td');
+        tdNg.textContent = fmtNum(m.ng);
+
+        const tdOther = document.createElement('td');
+        tdOther.textContent = fmtNum(m.other);
+
+        const tdOkRate = document.createElement('td');
+        tdOkRate.textContent = fmtRate(m.ok_rate);
+
+        const tdNgRate = document.createElement('td');
+        tdNgRate.textContent = fmtRate(m.ng_rate);
+
+        const tdUsed = document.createElement('td');
+        tdUsed.textContent = m.used === null ? '-' : fmtNum(m.used);
+
+        const tdInventory = document.createElement('td');
+        tdInventory.textContent = m.inventory === null ? '-' : fmtNum(m.inventory);
+
+        tr.appendChild(tdModel);
+        tr.appendChild(tdTotal);
+        tr.appendChild(tdOk);
+        tr.appendChild(tdNg);
+        tr.appendChild(tdOther);
+        tr.appendChild(tdOkRate);
+        tr.appendChild(tdNgRate);
+        tr.appendChild(tdUsed);
+        tr.appendChild(tdInventory);
+        els.modelRows.appendChild(tr);
+      });
+    }
+
     function renderLists(lists, filters) {
       const used = lists?.used || { total: 0, displayed: 0, rows: [] };
       const stock = lists?.stock || { total: 0, displayed: 0, rows: [] };
@@ -536,6 +672,7 @@
       const serial = els.serialFilter.value.trim();
       const result = els.resultFilter.value;
       const stock = els.stockFilter.value;
+      const model = els.modelFilter.value;
       const limit = els.limitInput.value.trim();
       const dateFrom = els.dateFrom.value;
       const dateTo = els.dateTo.value;
@@ -543,6 +680,7 @@
       if (serial) params.set('serial', serial);
       if (result) params.set('result', result);
       if (stock && stock !== 'ALL') params.set('stock', stock);
+      if (model && model !== 'ALL') params.set('model', model);
       if (limit) {
         params.set('limit', limit);
         params.set('list_limit', limit);
@@ -557,6 +695,8 @@
           throw new Error(data.error || '取得に失敗しました');
         }
         renderSummary(data.summary, data.oracle);
+        updateModelFilter(data.model_list);
+        renderModelStats(data.model_stats);
         renderRows(data.rows);
         renderLists(data.lists, data.filters);
       } catch (err) {

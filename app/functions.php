@@ -1253,6 +1253,13 @@ try {
                 json_response(['ok' => true, 'result' => $res]);
                 break;
             }
+        case 'judge_box_serials': {
+                $box = require_param('box', $_POST + $_GET);
+                $limit = isset($_POST['limit']) ? (int)$_POST['limit'] : (isset($_GET['limit']) ? (int)$_GET['limit'] : 5);
+                $res = get_boxid_serials($box, $limit);
+                json_response(['ok' => true, 'result' => $res]);
+                break;
+            }
         case 'reset_workflow_state': {
                 // 受取: keep_serial（任意）
                 // 処理: serial/papa などQR関連セッションの初期化（keep指定時はserialを保持）
@@ -1496,4 +1503,21 @@ function get_boxid_overview(int $recentLimit = 200): array
         'ng_count' => (int)($summary['ng_count'] ?? 0),
         'rows' => $rows,
     ];
+}
+
+/** 指定BOXに紐づく最新シリアル一覧を取得（重複排除） */
+function get_boxid_serials(string $box, int $limit = 5): array
+{
+    global $TABLE_BOXID;
+    $pdo = db();
+    $box = trim($box);
+    if ($box === '') return ['ok' => true, 'rows' => []];
+    $limit = max(1, min($limit, 200));
+    $sql = "SELECT DISTINCT serial, result, regtime FROM {$TABLE_BOXID} WHERE `box` = :box ORDER BY regtime DESC LIMIT :lim";
+    $st = $pdo->prepare($sql);
+    $st->bindValue(':box', $box, PDO::PARAM_STR);
+    $st->bindValue(':lim', $limit, PDO::PARAM_INT);
+    $st->execute();
+    $rows = $st->fetchAll(PDO::FETCH_ASSOC) ?: [];
+    return ['ok' => true, 'rows' => $rows];
 }

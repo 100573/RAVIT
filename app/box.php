@@ -547,6 +547,28 @@ if ($exportCsv) {
     $filename = 'boxid_' . date('Ymd_His') . '.csv';
     outputCsv($columns, $logs, $filename);
 }
+
+// --- BOX に紐づくシリアル一覧を表示するためのデータ準備 -----------------------
+$serialsForBox = [];
+$serialCount = 0;
+$maxSlots = 5; // 基本5台を最大とする
+$panelFlash = false;
+if ($searchBox !== '' && $searchSerial === '') {
+    try {
+        $sql = "SELECT DISTINCT `serial` FROM {$quotedTable} WHERE `box` = :box ORDER BY `regtime` DESC";
+        $stmt = $pdo->prepare($sql);
+        $stmt->bindValue(':box', $searchBox, PDO::PARAM_STR);
+        $stmt->execute();
+        $serialsForBox = $stmt->fetchAll(PDO::FETCH_COLUMN) ?: [];
+        $serialsForBox = array_values(array_filter(array_map('trim', $serialsForBox)));
+        $serialCount = count($serialsForBox);
+        if ($serialCount >= $maxSlots) {
+            $panelFlash = true; // 5台目登録時に視覚的にわかるようにする
+        }
+    } catch (Throwable $e) {
+        // 無視して従来通り表示させる
+    }
+}
 ?>
 <!doctype html>
 <html lang="ja">
@@ -834,6 +856,37 @@ if ($exportCsv) {
             gap: 8px;
             align-items: center;
         }
+        /* シリアル一覧パネル */
+        .serialPanel {
+            margin: 12px 0 18px 0;
+            padding: 12px;
+            border-radius: 10px;
+            border: 1px solid #e2e8f0;
+            background: #fff;
+        }
+        .serialPanel.full {
+            background: linear-gradient(90deg,#e6f0ff 0%, #e6f7ff 100%);
+            border-color: #60a5fa;
+            box-shadow: 0 6px 18px rgba(96,165,250,0.12);
+            transition: box-shadow 0.3s ease, background 0.3s ease;
+        }
+        .serialPanel .panelHeader {
+            display: flex;
+            align-items: baseline;
+            gap: 12px;
+            margin-bottom: 8px;
+        }
+        .serialPanel .panelHeader .count {
+            font-weight: 800;
+            color: #0f172a;
+        }
+        .serialPanel ol {
+            margin: 0;
+            padding-left: 18px;
+        }
+        .serialPanel li {
+            margin: 4px 0;
+        }
     </style>
 </head>
 
@@ -952,6 +1005,25 @@ if ($exportCsv) {
             <input type="hidden" name="date_to" value="<?= escapeHtml($dateTo) ?>" />
             <input type="hidden" name="id" id="singleIdField" value="">
             <div class="logTableWrap">
+                <?php if ($searchBox !== '' && $searchSerial === ''): ?>
+                    <div class="serialPanel <?= $panelFlash ? 'full' : '' ?>" id="serialPanel">
+                        <div class="panelHeader">
+                            <div><strong>BOXID:</strong> <?= escapeHtml($searchBox) ?></div>
+                            <div class="count"><?= $serialCount ?>/<?= $maxSlots ?>台</div>
+                        </div>
+                        <div class="panelList">
+                            <?php if ($serialCount === 0): ?>
+                                <div class="cellText">該当するシリアルはありません。</div>
+                            <?php else: ?>
+                                <ol>
+                                    <?php foreach (array_slice($serialsForBox, 0, $maxSlots) as $s): ?>
+                                        <li class="cellText"><?= escapeHtml($s) ?></li>
+                                    <?php endforeach; ?>
+                                </ol>
+                            <?php endif; ?>
+                        </div>
+                    </div>
+                <?php endif; ?>
                 <div class="bulkActions">
                 <button class="rowButton delete" type="submit" name="action" value="delete_selected" onclick="return confirm('選択した行を削除します。よろしいですか？');">選択行を削除</button>
                 <span class="recordCount">
@@ -1145,6 +1217,17 @@ if ($exportCsv) {
             fieldDateTo?.addEventListener('change', updateSummary);
 
             updateSummary();
+            // シリアルパネルが full のとき、一時的に色を強調してから解除
+            try {
+                const serialPanel = document.getElementById('serialPanel');
+                if (serialPanel && serialPanel.classList.contains('full')) {
+                    setTimeout(() => {
+                        serialPanel.classList.remove('full');
+                    }, 3000);
+                }
+            } catch (e) {
+                // ignore
+            }
         })();
     </script>
 </body>
