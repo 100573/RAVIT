@@ -727,6 +727,11 @@ $qrDelimiter = defined('QR_DELIM') ? constant('QR_DELIM') : '_';
             transition: all 0.25s ease;
         }
 
+        /* 登録ボタンの文字サイズを大きく */
+        #btnRegister {
+            font-size: 1.6em;
+        }
+
         .actionBtn:hover {
             transform: translateY(-2px);
             box-shadow: 0 12px 28px rgba(234, 88, 12, 0.45);
